@@ -124,10 +124,6 @@ class AssasController extends Controller {
                 ],
                 'verify' => false
             ];
-
-            if (env('APP_ENV') !== 'local') {
-                $options['json']['callback'] =  ['successUrl' => env('APP_URL')];
-            }
     
             $response =  $client->post(env('API_URL_ASSAS') . 'v3/payments', $options);
             $body       = (string) $response->getBody();
