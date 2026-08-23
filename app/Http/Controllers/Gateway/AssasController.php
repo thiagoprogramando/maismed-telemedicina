@@ -150,28 +150,35 @@ class AssasController extends Controller {
         $jsonData   = $request->json()->all();
         $token      = $jsonData['payment']['id'];
 
-        // if ($jsonData['event'] === 'PAYMENT_CONFIRMED' || $jsonData['event'] === 'PAYMENT_RECEIVED') {
+        if ($jsonData['event'] === 'PAYMENT_CONFIRMED' || $jsonData['event'] === 'PAYMENT_RECEIVED') {
             
-        //     $invoice = Invoice::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
-        //     if ($invoice) {
+            $invoice = Invoice::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
+            if ($invoice) {
 
-        //         $invoice->status = 'paid';
-        //         if ($invoice->save()) {
-        //             return response()->json(['message' => 'Fatura Aprovada!'], 200);
-        //         } else {
-        //             return response()->json(['message' => 'Falha ao tentar Aprovar Fatura!'], 400);
-        //         }
-        //     }
+                $invoice->status = 'paid';
+                if ($invoice->save()) {
+                    
+                    $user = $invoice->user;
+                    if ($user) {
+                        $user->status = 'active';
+                        $user->save();
+                    }
 
-        //     return response()->json(['message' => 'Nenhuma Fatura para o TOKEN!'], 200);
-        // };
+                    return response()->json(['message' => 'Fatura Aprovada!'], 200);
+                } else {
+                    return response()->json(['message' => 'Falha ao tentar Aprovar Fatura!'], 400);
+                }
+            }
+
+            return response()->json(['message' => 'Nenhuma Fatura para o TOKEN!'], 200);
+        };
 
         if ($jsonData['event'] === 'PAYMENT_OVERDUE') {
 
-            $invoice = Invoice::where('payment_token', $token)->whereIn('status', [0, 2])->first();
+            $invoice = Invoice::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
             if ($invoice) {
 
-                $invoice->status = 2;
+                $invoice->status = 'canceled';
                 if ($invoice->save()) {
                     return response()->json(['message' => 'Fatura Cancelada por vencimento!'], 200);
                 } else {
