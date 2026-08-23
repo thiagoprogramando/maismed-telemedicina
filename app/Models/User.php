@@ -75,6 +75,34 @@ class User extends Authenticatable {
         return $this->cpfcnpj;
     }
 
+    public function labelStatus () {
+        switch ($this->status) {
+            case 'active':
+                return '<span class="badge bg-success">Ativo</span>';
+                break;
+            case 'inactive':
+                return '<span class="badge bg-danger">Inativo</span>';
+                break;
+            default:
+                return '<span class="badge bg-info">N/a</span>';
+                break;
+        }
+    }
+
+    public function labelRoles () {
+        switch ($this->roles) {
+            case 'admin':
+                return '<span class="badge bg-dark">Administrador</span>';
+                break;
+            case 'collaborator':
+                return '<span class="badge bg-dark">Vendedor/Colaborador</span>';
+                break;
+            default:
+                return '<span class="badge bg-dark">N/a | Cliente | Beneficiário</span>';
+                break;
+        }
+    }
+
     protected function casts(): array {
         return [
             'email_verified_at' => 'datetime',

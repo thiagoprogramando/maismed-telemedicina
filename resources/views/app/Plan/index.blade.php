@@ -97,12 +97,6 @@
                                                                 <label for="description"> Descrição </label>
                                                             </div>
                                                         </div>
-                                                        <div class="col-12 mb-2">
-                                                            <div class="form-floating">
-                                                                <textarea class="form-control" name="features" id="features" placeholder="Features" style="height: 100px" disabled>{{ $plan->features }}</textarea>
-                                                                <label for="features"> Features </label>
-                                                            </div>
-                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">

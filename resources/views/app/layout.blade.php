@@ -51,6 +51,18 @@
                     <hr class="sidebar-divider d-none d-md-block">
                 @endif
 
+                @if (Auth::user()->roles == 'admin')
+                    <li class="nav-item">
+                        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseThree" aria-expanded="true" aria-controls="collapseThree"> <i class="fas fa-task fa-cog"></i> <span>Gestão</span> </a>
+                        <div id="collapseThree" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionSidebar">
+                            <div class="bg-white py-2 collapse-inner rounded">
+                                <h6 class="collapse-header">PESSOAS:</h6>
+                                    <a class="collapse-item" href="{{ route('users') }}">Pessoas & Usuários</a>
+                            </div>
+                        </div>
+                    </li>
+                @endif
+
                 <div class="text-center d-none d-md-inline">
                     <button class="rounded-circle border-0" id="sidebarToggle"></button>
                 </div>

@@ -11,6 +11,12 @@
         <div class="col-12 col-sm-12 col-md-12 col-lg-12 mb-2">
             <div class="card shadow h-100">
                 <div class="card-body">
+                    <form action="{{ route('deleted-user', ['uuid' => $user->uuid]) }}" method="POST" class="btn-group confirm mb-4">
+                        <a href="{{ route('users') }}" class="btn btn-outline-dark text-muted"title="Voltar"><i class="fas fa-chevron-left fa-sm text-muted"></i></a>
+                        <button type="submit" class="btn btn-outline-dark text-muted" @disabled(Auth::user()->roles !== 'admin') title="Excluir"><i class="fas fa-trash fa-sm text-muted"></i></button>
+                        <button type="button" class="btn btn-outline-dark" title="Recarregar" onClick="location.reload()"><i class="fas fa-sync-alt fa-sm text-muted"></i></button>
+                    </form>
+
                     <form action="{{ route('updated-user', $user->uuid) }}" method="POST" class="row">
                         @csrf
                         <div class="col-12 col-md-12 mb-2">
@@ -74,7 +80,7 @@
                             </div>
                         </div>
                         @if (Auth::user()->roles == 'admin')
-                            <div class="col-12 col-md-6 col-lg-6 mb-2">
+                            <div class="col-12 col-md-3 col-lg-3 mb-2">
                                 <div class="form-floating">
                                     <select class="form-select" name="roles" id="roles">
                                         <option value="admin" @selected($user->roles == 'admin')>Administrador</option>
@@ -82,6 +88,15 @@
                                         <option value="collaborator" @selected($user->roles == 'collaborator')>Colaborador</option>
                                     </select>
                                     <label for="roles">Função</label>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-3 col-lg-3 mb-2">
+                                <div class="form-floating">
+                                    <select class="form-select" name="status" id="status">
+                                        <option value="active" @selected($user->status == 'active')>Ativo</option>
+                                        <option value="inactive" @selected($user->status == 'inactive')>Inativo</option>
+                                    </select>
+                                    <label for="status">Status</label>
                                 </div>
                             </div>
                             <div class="col-12 col-md-6 col-lg-6 mb-2">
@@ -92,18 +107,9 @@
                             </div>
                         @endif
                         <div class="form-group col-12 col-md-12 col-lg-12">
-                            <button type="submit" class="btn btn-primary btn-user btn-block"> Atualizar </button>
-                            <button type="button" class="btn btn-secondary btn-user btn-block" onclick="window.history.back()"> Voltar </button>
+                            <button type="submit" class="btn btn-success btn-block" > Atualizar </button>
                         </div>
                     </form>
-                    @if (Auth::user()->roles == 'admin')
-                        <form action="{{ route('deleted-user', ['uuid' => $user->uuid]) }}" method="POST" class="row">
-                            @csrf
-                            <div class="form-group col-12 col-md-12 col-lg-12">
-                                <button type="submit" class="btn btn-danger btn-user btn-block"> Excluir </button>
-                            </div>
-                        </form>
-                    @endif
                 </div>
             </div>
         </div>

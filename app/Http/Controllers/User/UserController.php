@@ -13,11 +13,23 @@ use App\Models\Sale;
 
 class UserController extends Controller {
     
-    public function index() {
-        
+    public function index (Request $request) {
+
+        $query = User::query();
+
+        if (!empty($request->name)) {
+            $query->where('name', 'LIKE', '%'.$request->name.'%');
+        }
+        if (!empty($request->document)) {
+            $query->where('document', preg_replace('/\D/', '', $request->document));
+        }
+
+        return view('app.User.index', [
+            'users'=> $query->paginate(30)
+        ]);   
     }
 
-    public function show($uuid) {
+    public function show ($uuid) {
         
         $user = User::where('uuid', $uuid)->first();
         if (!$user) {
@@ -111,9 +123,16 @@ class UserController extends Controller {
         if (!empty($request->address_provincy)) {
             $user->address_provincy = $request->address_provincy;
         }
-        if (Auth::user()->roles == 'admin' && !empty($request->roles)) {
-            $user->roles    = $request->roles;
-            $user->password = bcrypt($request->password);
+        if (Auth::user()->roles == 'admin') {
+            if (!empty($request->roles)) {
+                $user->roles = $request->roles;
+            }
+            if (!empty($request->status)) {
+                $user->status = $request->status;
+            }
+            if (!empty($request->password)) {
+                $user->password = bcrypt($request->password);
+            }
         }
         
         if ($user->save()) {
