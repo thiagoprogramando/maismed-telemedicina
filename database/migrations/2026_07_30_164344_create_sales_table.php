@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->decimal('price', 10, 2)->default(0);
             $table->decimal('commission', 10, 2)->default(0);
             $table->json('payment_features')->nullable();
-            $table->enum('status', ['active', 'pendent', 'inactive'])->default('pendent');
+            $table->enum('status', ['active', 'pendent', 'canceled'])->default('pendent');
             $table->timestamps();
             $table->softDeletes();
         });

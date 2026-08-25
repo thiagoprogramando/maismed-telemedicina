@@ -13,9 +13,6 @@ use App\Http\Controllers\User\UserController;
 Route::get('/', [LoginController::class, 'index'])->name('login');
 Route::post('logon', [LoginController::class, 'logon'])->name('logon');
 
-Route::get('register/{indicator?}', [RegisterController::class, 'index'])->name('register');
-Route::post('created-user', [RegisterController::class, 'store'])->name('created-user');
-
 Route::get('/forgout/{code?}', [ForgoutController::class, 'index'])->name('forgout');
 Route::post('/forgout-password', [ForgoutController::class, 'forgoutPassword'])->name('forgout-password');
 Route::post('/recover-password/{code}', [ForgoutController::class, 'recoverPassword'])->name('recover-password');
@@ -30,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/sales', [SaleController::class, 'index'])->name('sales');
     Route::get('/sale/{uuid}', [SaleController::class, 'show'])->name('sale');
+    Route::post('/deleted-sale/{uuid}', [SaleController::class, 'destroy'])->name('deleted-sale');
 
     Route::get('/plans', [PlanController::class, 'index'])->name('plans');
     Route::get('/plan/{uuid}', [PlanController::class, 'show'])->name('plan');

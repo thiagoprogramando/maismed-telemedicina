@@ -89,7 +89,7 @@ class SaleExternalController extends Controller {
         }
 
         if (isset($customer['error']) && ($customer['error'] === true || $customer == false)) {
-            return redirect()->back()->withInput()->with('error', $customer['message']);
+            return redirect()->back()->withInput()->with('error', 'Verifique seus dados e tente novamente!');
         }
 
         $sale              = new Sale();

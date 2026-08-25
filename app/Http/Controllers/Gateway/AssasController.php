@@ -18,17 +18,18 @@ use GuzzleHttp\Exception\RequestException;
 class AssasController extends Controller {
     
     public function createdCustomer($name, $cpfcnpj, $mobilePhone = null, $email = null, $birth_date = null) {
+        
         try {
 
             $existingUser = User::where('document', $cpfcnpj)->first();
-            if ($existingUser) {
+            if ($existingUser && !empty($existingUser->token)) {
                 Log::warning("Tentativa de recriar cliente já existente", [
                     'document' => $cpfcnpj,
                     'email'    => $email,
                 ]);
                 return [
-                    'error'   => true,
-                    'message' => 'CPF/CNPJ já cadastrado no sistema. Por favor, utilize outro documento ou entre em contato com o suporte!',
+                    'user' => $existingUser,
+                    'id'   => $existingUser->token,
                 ];
             }
     
@@ -56,15 +57,20 @@ class AssasController extends Controller {
     
             if ($response->getStatusCode() === 200 && isset($data['id'])) {
 
-                $user             = new User();
-                $user->uuid       = Str::uuid();
-                $user->name       = $name;
-                $user->document   = $cpfcnpj;
-                $user->phone      = $mobilePhone;
-                $user->email      = $email;
-                $user->password   = bcrypt(substr(preg_replace('/\D/', '', $cpfcnpj), 0, 4));
-                $user->birth_date = $birth_date;
-                $user->token      = $data['id'];
+                if ($existingUser) {
+                    $user = $existingUser;
+                } else {
+                    $user             = new User();
+                    $user->uuid       = Str::uuid();
+                    $user->name       = $name;
+                    $user->document   = $cpfcnpj;
+                    $user->phone      = $mobilePhone;
+                    $user->email      = $email;
+                    $user->password   = bcrypt(substr(preg_replace('/\D/', '', $cpfcnpj), 0, 4));
+                    $user->birth_date = $birth_date;
+                }
+                
+                $user->token = $data['id'];
                 if ($user->save()) {
                     return [
                         'user' => $user,
@@ -103,6 +109,7 @@ class AssasController extends Controller {
     }
     
     public function createdCharge ($customer, $billingType, $installments, $value, $description, $dueDate) {
+        
         try {
             $client = new Client();
     
@@ -141,6 +148,32 @@ class AssasController extends Controller {
             }
         } catch (\Exception $e) {
             Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function canceledCharge ($token) {
+        
+        try {
+            $client = new Client();
+            $options = [
+                'headers' => [
+                    'Content-Type'  => 'application/json',
+                    'access_token'  => env('API_TOKEN_ASSAS'),
+                    'User-Agent'    => env('APP_NAME')
+                ],
+                'verify' => false
+            ];
+
+            $response = $client->delete(env('API_URL_ASSAS') . 'v3/payments/' . $token, $options);
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode((string) $response->getBody(), true);
+                return isset($data['deleted']) && $data['deleted'] === true;
+            }
+
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao cancelar fatura (ID: ' . $token . '): ' . $e->getMessage());
             return false;
         }
     }

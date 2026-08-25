@@ -35,13 +35,20 @@
                                             <small class="text-muted">{{ $sale->user->maskCpfCnpj() }}</small>
                                         </td>
                                         <td>
+                                            {!! $sale->labelStatus() !!}
                                             <span class="badge bg-primary">Dependentes: {{ $sale->user->children()->count() }}</span>  
                                             <span class="badge bg-primary">Responsável: {{ $sale->user->parent ? $sale->user->parent->name : 'N/a' }}</span> <br>
                                             <span class="badge bg-primary">Planos: {{ $sale->plan->name ?? 'N/a' }}</span>
                                             <span class="badge bg-primary">Faturas: {{ $sale->invoices()->count() }}</span>
                                         </td>
                                         <td>
-                                            <a href="{{ route('sale', ['uuid' => $sale->uuid]) }}" class="btn btn-outline-dark" title="Editar"><i class="fas fa-edit fa-sm text-muted"></i></a>
+                                            <form action="{{ route('deleted-sale', $sale->uuid) }}" method="POST" class="btn-group confirm">
+                                                @csrf
+                                                <a href="{{ route('sale', ['uuid' => $sale->uuid]) }}" class="btn btn-outline-dark" title="Editar"><i class="fas fa-edit fa-sm text-muted"></i></a>
+                                                @if(Auth::user()->roles == 'admin')
+                                                    <button type="submit" class="btn btn-outline-dark" title="Excluir"><i class="fas fa-trash fa-sm text-muted"></i></button>
+                                                @endif
+                                            </form>
                                         </td>
                                     </tr>
                                 @endforeach

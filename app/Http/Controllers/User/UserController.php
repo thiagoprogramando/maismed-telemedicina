@@ -168,6 +168,10 @@ class UserController extends Controller {
             return redirect()->back()->with('error', 'Plano não encontrado, verifique os dados e tente novamente!');
         }
 
+        if ($sale->status == 'pendent' || $sale->status == 'canceled') {
+            return redirect()->back()->with('error', 'O plano vinculado a esta venda não está disponível, ou foi cancelado!');
+        }
+
         if (!$sale->plan) {
             return redirect()->back()->with('error', 'O plano vinculado a esta venda não está disponível!');
         }

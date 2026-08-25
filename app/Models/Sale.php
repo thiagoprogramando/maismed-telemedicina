@@ -35,4 +35,21 @@ class Sale extends Model {
     public function plan () {
         return $this->belongsTo(Plan::class, 'plan_id');
     }
+
+    public function labelStatus () {
+        switch ($this->status) {
+            case 'active':
+                return '<span class="badge bg-success">Ativo</span>';
+                break;
+            case 'pendent':
+                return '<span class="badge bg-warning">Pendente</span>';
+                break;
+            case 'canceled':
+                return '<span class="badge bg-danger">Cancelada</span>';
+                break;
+            default:
+                return '<span class="badge bg-info">N/a</span>';
+                break;
+        }
+    }
 }
