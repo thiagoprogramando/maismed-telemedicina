@@ -45,9 +45,6 @@
                                             <div class="form-group">
                                                 <button type="submit" class="btn btn-primary btn-user btn-block"> Acessar </button>
                                             </div>
-                                            <div class="form-group">
-                                                <a href="{{ route('register') }}" class="btn btn-outline-primary btn-user btn-block"> Conheça nossas soluções </a>
-                                            </div>
                                         </form>
                                         <hr>
                                         <div class="text-center">
