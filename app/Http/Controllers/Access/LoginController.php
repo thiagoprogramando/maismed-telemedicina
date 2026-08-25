@@ -23,7 +23,7 @@ class LoginController extends Controller {
             'email'     => 'required|email|exists:users,email',
             'password'  => 'required',
         ], [
-            'email.exists' => 'Você ainda não possui cadastro! <a href="'.route('register').'">Cadastre-se aqui</a> para ter sua Conta.',
+            'email.exists' => 'Você ainda não possui cadastro!',
         ]);
 
         $credentials = $request->only(['email', 'password']);
