@@ -49,6 +49,11 @@
                         </div>
                     </li>
                     <hr class="sidebar-divider d-none d-md-block">
+
+                    <div class="sidebar-heading"> Finanças </div>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ route('wallet', ['uuid' => Auth::user()->uuid]) }}"> <i class="fas fa-fw fa-wallet"></i> <span>Carteira</span></a>
+                    </li>
                 @endif
 
                 @if (Auth::user()->roles == 'admin')

@@ -5,6 +5,7 @@ use App\Http\Controllers\Access\LoginController;
 use App\Http\Controllers\Access\RegisterController;
 use App\Http\Controllers\Access\ForgoutController;
 use App\Http\Controllers\AppController;
+use App\Http\Controllers\Finance\WalletController;
 use App\Http\Controllers\Plan\PlanController;
 use App\Http\Controllers\Sale\SaleController;
 use App\Http\Controllers\Sale\SaleExternalController;
@@ -28,6 +29,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/sales', [SaleController::class, 'index'])->name('sales');
     Route::get('/sale/{uuid}', [SaleController::class, 'show'])->name('sale');
     Route::post('/deleted-sale/{uuid}', [SaleController::class, 'destroy'])->name('deleted-sale');
+
+    Route::get('wallet/{uuid}', [WalletController::class, 'show'])->name('wallet');
 
     Route::get('/plans', [PlanController::class, 'index'])->name('plans');
     Route::get('/plan/{uuid}', [PlanController::class, 'show'])->name('plan');

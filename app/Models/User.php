@@ -33,6 +33,7 @@ class User extends Authenticatable {
         'address_provincy', 
         'password',
         'token',
+        'wallet',
         'status',
         'roles',
     ];

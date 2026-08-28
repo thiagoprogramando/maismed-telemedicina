@@ -24,6 +24,7 @@
                             <thead>
                                 <tr>
                                     <th>DETALHES</th>
+                                    <th>CARTEIRA</th>
                                     <th>INFORMAÇÕES</th>
                                     <th>AÇÕES</th>
                                 </tr>
@@ -36,6 +37,10 @@
                                             <small class="text-muted">{{ $user->maskCpfCnpj() }}</small>
                                         </td>
                                         <td>
+                                            <strong onClick="onClip('{{ $user->uuid }}')">{{ $user->uuid }}</strong><br>
+                                            <small class="text-muted">{{ $user->maskCpfCnpj() }}</small>
+                                        </td>
+                                        <td>
                                             <span class="badge bg-dark">{!! $user->labelRoles() !!}</span>
                                             <span class="badge bg-primary">Dependentes: {{ $user->children()->count() }}</span>  
                                             <span class="badge bg-primary">Responsável: {{ $user->parent ? $user->parent->name : 'N/a' }}</span> <br>
@@ -45,6 +50,7 @@
                                         <td>
                                             <form action="{{ route('deleted-user', ['uuid' => $user->uuid]) }}" method="POST" class="btn-group confirm">
                                                 @csrf
+                                                <a href="{{ route('wallet', ['uuid' => $user->uuid]) }}" class="btn btn-outline-dark" title="Carteira"><i class="fas fa-wallet fa-sm text-muted"></i></a>
                                                 <a href="{{ route('user', ['uuid' => $user->uuid]) }}" class="btn btn-outline-dark" title="Editar"><i class="fas fa-edit fa-sm text-muted"></i></a>
                                                 <button type="submit" class="btn btn-outline-dark" title="Excluir"><i class="fas fa-trash fa-sm text-muted"></i></button>
                                             </form>

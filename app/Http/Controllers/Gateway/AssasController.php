@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Gateway;
 
 use App\Http\Controllers\Controller;
+use App\Models\Extract;
 use App\Models\User;
 use App\Models\Invoice;
 
@@ -197,6 +198,18 @@ class AssasController extends Controller {
                         $user->save();
                     }
 
+                    $extract = Extract::where('payment_token', $token) ->first();
+                    if ($extract) { 
+                        $extract->status = 'paid'; 
+                        $extract->payment_date = now(); 
+                        $extract->save();
+
+                        $extractUser = User::find($extract->user_id); 
+                        if ($extractUser) {
+                            $extractUser->increment('wallet', $invoice->commission);
+                        }
+                    }
+
                     return response()->json(['message' => 'Fatura Aprovada!'], 200);
                 } else {
                     return response()->json(['message' => 'Falha ao tentar Aprovar Fatura!'], 400);
@@ -213,6 +226,14 @@ class AssasController extends Controller {
 
                 $invoice->status = 'canceled';
                 if ($invoice->save()) {
+
+                    $extract = Extract::where('payment_token', $token) ->first();
+                    if ($extract) { 
+                        $extract->status = 'canceled'; 
+                        $extract->payment_date = now(); 
+                        $extract->save();
+                    }
+
                     return response()->json(['message' => 'Fatura Cancelada por vencimento!'], 200);
                 } else {
                     return response()->json(['message' => 'Falha o tentar Cancelar Fatura!'], 400);
@@ -226,6 +247,14 @@ class AssasController extends Controller {
             
             $invoice = Invoice::where('payment_token', $token)->first();
             if ($invoice && $invoice->delete()) {
+
+                $extract = Extract::where('payment_token', $token) ->first();
+                if ($extract) { 
+                    $extract->status = 'canceled'; 
+                    $extract->payment_date = now(); 
+                    $extract->save();
+                }
+
                 return response()->json(['message' => 'Fatura deletada via Assas e espelhada no app!'], 200);
             }
 
@@ -238,6 +267,14 @@ class AssasController extends Controller {
             if ($invoice) {
                 if ($invoice->trashed()) {
                     $invoice->restore();
+
+                    $extract = Extract::where('payment_token', $token) ->first();
+                    if ($extract) { 
+                        $extract->status = 'pendent'; 
+                        $extract->payment_date = now(); 
+                        $extract->save();
+                    }
+
                     return response()->json(['message' => 'Fatura restaurada via Assas e espelhada no app!'], 200);
                 }
 

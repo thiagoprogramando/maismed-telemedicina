@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Sale;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Gateway\AssasController;
-
+use App\Models\Extract;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Invoice;
@@ -140,6 +140,7 @@ class SaleExternalController extends Controller {
                 }
                 
                 $this->createInvoice($seller, $sale, $plan, $i === 1 && $paymentMethod === 'CREDIT_CARD' ? 'Plano: ' . $plan->name : "Parcela {$i} do plano: " . $plan->name, $paymentMethod, $dueDay, $dueDate, $charge);
+                $this->createCommission($seller, $sale, $plan, $dueDate, $charge);
             }
         });
     }
@@ -166,5 +167,28 @@ class SaleExternalController extends Controller {
         $invoice->save();
  
         return $invoice;
+    }
+
+    private function createCommission ($user, $sale, $plan, $dueDate, $paymentFeatures) {
+        
+        if ($plan->commission <= 0) {
+            return;
+        }
+        
+        $extract              = new Extract();
+        $extract->uuid        = Str::uuid();
+        $extract->user_id     = $user->id;
+        $extract->sale_id     = $sale->id;
+        $extract->title       = 'Comissão';
+        $extract->description = 'Comissão pela venda N '.$sale->id.' - '.$sale->user->name;
+        $extract->value       = $plan->commission;
+        $extract->payment_date      = $dueDate;
+        $extract->payment_token     = $paymentFeatures['id'] ?? null;
+        $extract->payment_url       = $paymentFeatures['invoiceUrl'] ?? null;
+        $extract->type              = 'commission';
+        $extract->status            = 'pendent';
+        $extract->save();
+ 
+        return $extract;
     }
 }
