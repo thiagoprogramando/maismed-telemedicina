@@ -82,7 +82,7 @@ class SaleExternalController extends Controller {
         $assasController = new AssasController();
 
         try {
-            $customer = $assasController->createdCustomer($validated['name'], preg_replace('/\D/', '', $validated['document']), preg_replace('/\D/', '', $validated['phone']), preg_replace('/\D/', '', $validated['email']), $request->birth_date);
+            $customer = $assasController->createdCustomer($validated['name'], preg_replace('/\D/', '', $validated['document']), preg_replace('/\D/', '', $validated['phone']), $validated['email'], $request->birth_date);
         } catch (\Throwable $e) {
             Log::error('Falha ao criar cliente no Asaas', ['plan_id' => $plan->uuid, 'seller' => $seller->uuid, 'error' => $e->getMessage()]);
             $customer = false;
