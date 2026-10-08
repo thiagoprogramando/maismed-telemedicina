@@ -16,9 +16,25 @@ class Sale extends Model {
         'description',
         'price',
         'commission',
+        'quantity',
+        'dependents',
         'payment_features',
         'status'
     ];
+
+    // Limite de pessoas (titular + dependentes) da venda. Vendas sem quantidade contratada seguem o limite do plano.
+    public function maxUsers () {
+
+        if ($this->quantity === null) {
+            return $this->plan->max_users;
+        }
+
+        if ($this->plan->isBusiness()) {
+            return $this->quantity + $this->dependents;
+        }
+
+        return max($this->quantity, $this->plan->includedUsers());
+    }
 
     public function sale () {
         return $this->belongsTo(User::class, 'seller_id');

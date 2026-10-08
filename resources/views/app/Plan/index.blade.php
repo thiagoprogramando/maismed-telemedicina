@@ -17,6 +17,7 @@
                         @if(Auth::user()->roles == 'admin') <button type="button" class="btn btn-outline-dark text-muted" data-toggle="modal" data-target="#createdModal" title="Novo Plano"><i class="fas fa-plus fa-sm text-muted"></i></button> @endif
                         <button type="button" class="btn btn-outline-dark text-muted" data-toggle="modal" data-target="#filterModal" title="Filtrar"><i class="fas fa-filter fa-sm text-muted"></i></button>
                         <button type="button" class="btn btn-outline-dark" title="Recarregar" onClick="location.reload()"><i class="fas fa-sync-alt fa-sm text-muted"></i></button>
+                        <a href="{{ route('showcase', ['parent' => Auth::user()->uuid]) }}" target="_blank" class="btn btn-outline-dark text-muted" title="Ver vitrine pública"><i data-lucide="layout-grid" style="width: 14px; height: 14px;"></i></a>
                     </div>
 
                     <div class="table-responsive">
@@ -36,7 +37,7 @@
                                             <small class="text-muted">{{ $plan->description }}</small>
                                         </td>
                                         <td>
-                                            <span class="badge bg-primary">Beneficiários {{ $plan->max_users }}</span> <span class="badge bg-primary">Preço R$ {{ number_format($plan->price, 2, ',', '.') }}</span> <span class="badge bg-primary">Comissão R$ {{ number_format($plan->commission, 2, ',', '.') }}</span>
+                                            <span class="badge bg-dark">{{ $plan->typeLabel() }}</span> <span class="badge bg-primary">Limite {{ $plan->max_users ?? 'N/a' }}</span> <span class="badge bg-primary">Preço R$ {{ number_format($plan->price, 2, ',', '.') }}</span> @if($plan->extra_price > 0) <span class="badge bg-primary">Extra R$ {{ number_format($plan->extra_price, 2, ',', '.') }}</span> @endif <span class="badge bg-primary">Comissão R$ {{ number_format($plan->commission, 2, ',', '.') }}</span>
                                             <span class="badge bg-primary">Responsável {{ $plan->user()->name ?? 'N/a' }}</span> <span class="badge bg-primary">{{ $plan->statusLabel() }}</span> <span class="badge bg-primary">{{ $plan->timeLabel() }}</span>
                                         </td>
                                         <td>
@@ -116,7 +117,7 @@
     </div>
 
     <div class="modal fade" id="createdModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
-        <div class="modal-dialog" role="document">
+        <div class="modal-dialog modal-lg" role="document">
             <form action="{{ route('created-plan') }}" method="POST" class="modal-content" id="form">
                 @csrf
                 <input type="hidden" name="terms" id="terms">
@@ -127,67 +128,7 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    <div class="row">
-                        <div class="col-12 col-md-12 mb-2">
-                            <div class="form-floating">
-                                <input type="text" class="form-control" name="name" id="name" placeholder="Título" required>
-                                <label for="name">Título</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-6 mb-2">
-                            <div class="form-floating">
-                                <input type="text" class="form-control" name="price" id="price" oninput="maskValue(this)" placeholder="Valor (R$)">
-                                <label for="price">Valor (R$)</label>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-6 mb-2">
-                            <div class="form-floating">
-                                <input type="text" class="form-control" name="commission" id="commission" oninput="maskValue(this)" placeholder="Comissão (R$)">
-                                <label for="commission">Comissão (R$)</label>
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-4 mb-2">
-                            <div class="form-floating">
-                                <select class="form-select" name="status" id="status" required>
-                                    <option value="active" selected>Ativo</option>
-                                    <option value="inactive">Inativo</option>
-                                </select>
-                                <label for="status">Status</label>
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-4 mb-2">
-                            <div class="form-floating">
-                                <select class="form-select" name="time" id="time" required>
-                                    <option value="month" selected>Mensal</option>
-                                    <option value="semi-annual">Semestral</option>
-                                    <option value="year">Anual</option>
-                                    <option value="lifetime">Vitalício</option>
-                                </select>
-                                <label for="time">Vencimento</label>
-                            </div>
-                        </div>
-                        <div class="col-12 col-md-4 mb-2">
-                            <div class="form-floating">
-                                <input type="number" class="form-control" name="max_users" id="max_users" placeholder="Máx Usuários">
-                                <label for="max_users">Máx Usuários</label>
-                            </div>
-                        </div>
-                        <div class="col-12 mb-2">
-                            <div class="form-floating">
-                                <textarea class="form-control" name="description" id="description" placeholder="Descrição" style="height: 100px"></textarea>
-                                <label for="description"> Descrição </label>
-                            </div>
-                        </div>
-                        <div class="col-12 mb-2">
-                            <div class="form-floating">
-                                <textarea class="form-control" name="features" id="features" placeholder="Features" style="height: 100px"></textarea>
-                                <label for="features"> Features </label>
-                            </div>
-                        </div>
-                        <div class="col-12 mb-2">
-                            <div class="full-editor" style="height: 100px;"></div>
-                        </div>
-                    </div>
+                    @include('app.Plan.form', ['plan' => null])
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-outline-danger" type="button" data-dismiss="modal">Cancelar</button>

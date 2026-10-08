@@ -2,6 +2,7 @@
 @section('content')
 
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
+    <link href="{{ asset('Assets/css/plan-card.css') }}" rel="stylesheet">
 
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-primary">{{ $plan->name }}</h1>
@@ -9,82 +10,28 @@
     </div>
 
     <div class="row">
-        <div class="col-12 col-sm-12 col-md-12 col-lg-12">
-            <div class="card shadow h-100 py-2">
-                <form action="{{ route('updated-plan', ['uuid' => $plan->uuid]) }}" method="POST" class="card-body row" id="form">
+        <div class="col-12 col-lg-7 mb-4">
+            <div class="card shadow py-2">
+                <form action="{{ route('updated-plan', ['uuid' => $plan->uuid]) }}" method="POST" class="card-body" id="form">
                     @csrf
                     <input type="hidden" name="terms" id="terms">
-                    <div class="col-12 col-md-9 mb-2">
-                        <div class="form-floating">
-                            <input type="text" class="form-control" name="name" id="name" placeholder="Título" value="{{ $plan->name }}">
-                            <label for="name">Título</label>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-3 mb-2">
-                        <div class="form-floating">
-                            <select class="form-select" name="status" id="status" required>
-                                <option value="active" @selected($plan->status == 'active')>Ativo</option>
-                                <option value="inactive" @selected($plan->status == 'inactive')>Inativo</option>
-                            </select>
-                            <label for="status">Status</label>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-3 mb-2">
-                        <div class="form-floating">
-                            <input type="text" class="form-control money" name="price" id="price" oninput="maskValue(this)"  value="{{ $plan->price }}" placeholder="Valor (R$)">
-                            <label for="price">Valor (R$)</label>
-                        </div>
-                    </div>
-                    <div class="col-6 col-md-3 mb-2">
-                        <div class="form-floating">
-                            <input type="text" class="form-control money" name="commission" id="commission" oninput="maskValue(this)" value="{{ $plan->commission }}" placeholder="Comissão (R$)">
-                            <label for="commission">Comissão (R$)</label>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-3 mb-2">
-                        <div class="form-floating">
-                            <select class="form-select" name="time" id="time" required>
-                                <option value="month" @selected($plan->time == 'month')>Mensal</option>
-                                <option value="semi-annual" @selected($plan->time == 'semi-annual')>Semestral</option>
-                                <option value="year" @selected($plan->time == 'year')>Anual</option>
-                                <option value="lifetime" @selected($plan->time == 'lifetime')>Vitalício</option>
-                            </select>
-                            <label for="time">Vencimento</label>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-3 mb-2">
-                        <div class="form-floating">
-                            <input type="number" class="form-control" name="max_users" id="max_users" value="{{ $plan->max_users }}" placeholder="Máx Usuários">
-                            <label for="max_users">Máx Usuários</label>
-                        </div>
-                    </div>
-                    <div class="col-12 mb-2">
-                        <div class="form-floating">
-                            <textarea class="form-control" name="description" id="description" placeholder="Descrição" style="height: 100px">{{ $plan->description }}</textarea>
-                            <label for="description"> Descrição </label>
-                        </div>
-                    </div>
-                    <div class="col-12 mb-2">
-                        <div class="form-floating">
-                            <textarea class="form-control" name="features" id="features" placeholder="Features" style="height: 100px">{{ $plan->features }}</textarea>
-                            <label for="features"> Features </label>
-                        </div>
-                    </div>
-                    <div class="col-12 mb-2">
-                            <div class="full-editor" style="height: 100px;">
-                                {!! $plan->terms !!}
-                            </div>
-                        </div>
-                    <div class="col-12 text-center">
+                    @include('app.Plan.form', ['plan' => $plan])
+                    <div class="text-center">
                         <a href="{{ route('plans') }}" class="btn btn-outline-danger">Sair</a>
                         <button class="btn btn-success" type="submit">Atualizar</button>
                     </div>
                 </form>
             </div>
         </div>
+        <div class="col-12 col-lg-5 mb-4">
+            <div class="text-xs font-weight-bold text-dark text-uppercase mb-2"><i data-lucide="eye" style="width: 14px; height: 14px;"></i> Como o cliente vê</div>
+            @include('sale.plan_card', ['plan' => $plan, 'parent' => null, 'cta' => false, 'qty' => null, 'dep' => null])
+            <small class="text-muted d-block mt-2">A prévia reflete os dados salvos. Clique em Atualizar para ver as alterações.</small>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+    <script src="{{ asset('Assets/js/plan-card.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
 

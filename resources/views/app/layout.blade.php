@@ -272,6 +272,7 @@
         <script src="{{ asset('Assets/js/sb-admin-2.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sweet-alert.js') }}"></script>
         <script src="{{ asset('Assets/js/mask.js') }}"></script>
+        <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
 
         <script>
             @if(session('error'))
@@ -303,6 +304,7 @@
 
             document.addEventListener('DOMContentLoaded', function () {
                 applyMasks(document);
+                lucide.createIcons();
                 document.querySelectorAll('form.delete').forEach(form => {
                     form.addEventListener('submit', function (event) {
                         event.preventDefault();

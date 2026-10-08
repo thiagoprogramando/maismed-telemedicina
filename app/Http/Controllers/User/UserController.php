@@ -180,7 +180,7 @@ class UserController extends Controller {
             return redirect()->back()->with('error', 'O titular deste plano não foi encontrado!');
         }
 
-        $maxUsers       = $sale->plan->max_users;
+        $maxUsers       = $sale->maxUsers();
         $dependents     = $sale->user->children->count();
         $currentUsers   = 1 + $dependents;
 

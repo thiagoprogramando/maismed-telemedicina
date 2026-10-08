@@ -44,6 +44,8 @@ class PlanController extends Controller {
 
     public function store (Request $request) {
 
+        $this->validatePlan($request);
+
         $plan               = new Plan();
         $plan->uuid         = Str::uuid();
         $plan->created_by   = Auth::user()->id;
@@ -51,6 +53,10 @@ class PlanController extends Controller {
         $plan->price        = $this->formatValue($request->price);
         $plan->commission   = $this->formatValue($request->commission);
         $plan->max_users    = $request->max_users;
+        $plan->type         = $request->type ?? 'family';
+        $plan->badge        = $request->badge;
+        $plan->included_users = $request->included_users ?: null;
+        $plan->extra_price  = $this->formatValue($request->extra_price);
         $plan->status       = $request->status;
         $plan->time         = $request->time;
         $plan->description  = $request->description;
@@ -69,6 +75,8 @@ class PlanController extends Controller {
         if (!$plan) {
             return redirect()->back()->with('infor', 'Plano indisponível!');
         }
+
+        $this->validatePlan($request);
 
         if (!empty($request->name)) {
             $plan->name = $request->name;
@@ -97,6 +105,18 @@ class PlanController extends Controller {
         if (!empty($request->features)) {
             $plan->features = $request->features;
         }
+        if (!empty($request->type)) {
+            $plan->type = $request->type;
+        }
+        if ($request->has('badge')) {
+            $plan->badge = $request->badge;
+        }
+        if ($request->has('included_users')) {
+            $plan->included_users = $request->included_users ?: null;
+        }
+        if ($request->has('extra_price')) {
+            $plan->extra_price = $this->formatValue($request->extra_price);
+        }
 
         if ($plan->save()) {
            return redirect()->route('plan', ['uuid' => $plan->uuid])->with('success', 'Plano atualizado com sucesso!');
@@ -118,6 +138,23 @@ class PlanController extends Controller {
         }
 
         return redirect()->back()->with('error', 'Credenciais inválidas, verifique os dados e tente novamente!');
+    }
+
+    private function validatePlan (Request $request) {
+
+        $request->validate([
+            'type'           => ['nullable', 'in:family,business'],
+            'badge'          => ['nullable', 'string', 'max:60'],
+            'included_users' => ['nullable', 'integer', 'min:1'],
+            'max_users'      => ['nullable', 'integer', 'min:1'],
+        ], [
+            'type.in'                => 'Tipo de plano inválido.',
+            'badge.max'              => 'O selo de destaque não pode ter mais que :max caracteres.',
+            'included_users.integer' => 'Pessoas incluídas deve ser um número.',
+            'included_users.min'     => 'Pessoas incluídas deve ser no mínimo :min.',
+            'max_users.integer'      => 'O limite de pessoas deve ser um número.',
+            'max_users.min'          => 'O limite de pessoas deve ser no mínimo :min.',
+        ]);
     }
 
     private function formatValue ($value) {

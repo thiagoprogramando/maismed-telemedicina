@@ -18,6 +18,7 @@ Route::get('/forgout/{code?}', [ForgoutController::class, 'index'])->name('forgo
 Route::post('/forgout-password', [ForgoutController::class, 'forgoutPassword'])->name('forgout-password');
 Route::post('/recover-password/{code}', [ForgoutController::class, 'recoverPassword'])->name('recover-password');
 
+Route::get('/planos/{parent?}', [SaleExternalController::class, 'showcase'])->name('showcase');
 Route::get('/create-sale/{plan}/{parent?}', [SaleExternalController::class, 'index'])->name('create-sale');
 Route::get('/thank-you', [SaleExternalController::class, 'thankYou'])->name('thank-you');
 Route::post('created-sale', [SaleExternalController::class, 'store'])->name('created-sale');

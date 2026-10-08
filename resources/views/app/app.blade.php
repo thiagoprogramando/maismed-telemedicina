@@ -12,6 +12,8 @@
                     <div class="card-body">
                         <div class="row no-gutters align-items-center">
                             <div class="text-xs font-weight-bold text-dark text-uppercase mb-1">LINKS DE REVENDA (CLICK PARA COPIAR)</div>
+                            <button type="button" class="btn btn-outline-primary mb-2" onClick="onClip('{{ route('showcase', ['parent' => Auth::user()->uuid]) }}')"><i data-lucide="layout-grid" style="width: 14px; height: 14px;"></i> Vitrine de planos</button>
+                            </br>
                             @foreach ($plans as $plan)
                                 <button type="button" class="btn btn-outline-info mb-2" onClick="onClip('{{ env('APP_URL').'create-sale/'.$plan->slug.'/'.Auth::user()->uuid }}')"><i class="fas fa-copy fa-sm"></i> Plano {{ $plan->name }}</button>
                                 </br>
