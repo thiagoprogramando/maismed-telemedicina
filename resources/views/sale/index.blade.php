@@ -15,6 +15,7 @@
         <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
         <link href="{{ asset('Assets/css/sb-admin-2.css') }}" rel="stylesheet">
+        <link href="{{ asset('Assets/css/plan-card.css') }}" rel="stylesheet">
         
     </head>
 
@@ -32,9 +33,11 @@
                                     <div class="p-3">
                                         <div class="text-center bg-primary">
                                             <img src="{{ asset('Assets/img/logo.png') }}" class="img-fluid w-25" alt="Logo Mais Med">
-                                            <small class="text-white">{{ $plan->name }} R$ {{ number_format($plan->price, 2, ',', '.').'/Mês' }} </small>
                                         </div>
-                                        <form action="{{ route('created-sale') }}" method="POST" class="mt-2 mb-5">
+                                        <div class="mx-auto my-3" style="max-width: 460px;">
+                                            @include('sale.plan_card', ['plan' => $plan, 'parent' => $parent, 'cta' => false, 'qty' => $qty, 'dep' => $dep, 'form' => 'sale-form'])
+                                        </div>
+                                        <form action="{{ route('created-sale') }}" method="POST" class="mt-2 mb-5" id="sale-form">
                                             @csrf
                                             <input type="hidden" name="parent_id" value="{{ $parent->uuid ?? null }}">
                                             <input type="hidden" name="plan_id" value="{{ $plan->uuid }}">
@@ -178,7 +181,11 @@
         <script src="{{ asset('Assets/js/sb-admin-2.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sweet-alert.js') }}"></script>
         <script src="{{ asset('Assets/js/mask.js') }}"></script>
+        <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
+        <script src="{{ asset('Assets/js/plan-card.js') }}"></script>
         <script>
+            lucide.createIcons();
+
             @if(session('error'))
                 Swal.fire({
                     title: 'Atenção!',

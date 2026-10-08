@@ -20,7 +20,15 @@ class SaleExternalController extends Controller {
     private const INSTALLMENTS      = 12;
     private const FIRST_DUE_DAYS    = 3;
     
-    public function index(string $plan, ?string $parent = null) {
+    public function showcase(?string $parent = null) {
+
+        $plans  = Plan::where('status', 'active')->orderBy('price', 'asc')->get();
+        $parent = $parent ? User::firstWhere('uuid', $parent) : null;
+
+        return view('sale.showcase', compact('plans', 'parent'));
+    }
+
+    public function index(Request $request, string $plan, ?string $parent = null) {
 
         $plan = Plan::firstWhere('slug', $plan);
         if (!$plan) {
@@ -29,7 +37,12 @@ class SaleExternalController extends Controller {
 
         $parent = $parent ? User::firstWhere('uuid', $parent) : null;
 
-        return view('sale.index', compact('plan', 'parent'));
+        return view('sale.index', [
+            'plan'   => $plan,
+            'parent' => $parent,
+            'qty'    => old('quantity', $request->query('qty')),
+            'dep'    => old('dependents', $request->query('dep')),
+        ]);
     }
 
     public function thankYou () {
@@ -47,7 +60,13 @@ class SaleExternalController extends Controller {
             'email'          => ['required', 'email'],
             'payment_method' => ['required', 'in:CREDIT_CARD,PIX,BOLETO'],
             'due_date'       => ['required', 'integer', 'min:1', 'max:28'],
+            'quantity'       => ['nullable', 'integer', 'min:1'],
+            'dependents'     => ['nullable', 'integer', 'min:0'],
         ], [
+            'quantity.integer'        => 'A quantidade de pessoas deve ser um número.',
+            'quantity.min'            => 'A quantidade de pessoas deve ser no mínimo :min.',
+            'dependents.integer'      => 'A quantidade de dependentes deve ser um número.',
+            'dependents.min'          => 'A quantidade de dependentes não pode ser negativa.',
             'plan_id.required'        => 'Selecione um plano para continuar.',
             'plan_id.string'          => 'O plano selecionado é inválido.',
             'parent_id.required'      => 'Consultor não identificado. Verifique o link de acesso.',
@@ -79,7 +98,10 @@ class SaleExternalController extends Controller {
             return redirect()->back()->withInput()->with('infor', 'Falha ao aderir o plano, verifique com seu Consultor!');
         }
 
-        $assasController = new AssasController();
+        // O valor cobrado é sempre recalculado aqui; o total exibido no navegador não é confiável.
+        $quote = $plan->quote($validated['quantity'] ?? null, $validated['dependents'] ?? null);
+
+        $assasController = app(AssasController::class);
 
         try {
             $customer = $assasController->createdCustomer($validated['name'], preg_replace('/\D/', '', $validated['document']), preg_replace('/\D/', '', $validated['phone']), $validated['email'], $request->birth_date);
@@ -99,8 +121,10 @@ class SaleExternalController extends Controller {
         $sale->plan_id     = $plan->id;
         $sale->name        = $plan->name;
         $sale->description = $plan->name;
-        $sale->price       = $plan->price;
-        $sale->commission  = $plan->commission;
+        $sale->price       = $quote['price'];
+        $sale->commission  = $quote['commission'];
+        $sale->quantity    = $quote['quantity'];
+        $sale->dependents  = $quote['dependents'];
         $sale->status      = 'pendent';
         if ($sale->save()) {
 
@@ -130,7 +154,7 @@ class SaleExternalController extends Controller {
             for ($i = 1; $i <= self::INSTALLMENTS; $i++) {
                 $dueDate = $i === 1 ? now()->addDays(self::FIRST_DUE_DAYS) : now()->startOfMonth()->addMonths($i)->day($dueDay);
                 try {
-                    $charge = $assasController->createdCharge($customer, $billingType, 1, $plan->price, 'Plano: ' . $plan->name, $dueDate);
+                    $charge = $assasController->createdCharge($customer, $billingType, 1, $sale->price, 'Plano: ' . $plan->name, $dueDate);
                 } catch (\Throwable $e) {
                     throw new \RuntimeException("Erro ao gerar cobrança da parcela {$i}: " . $e->getMessage());
                 }
@@ -153,8 +177,8 @@ class SaleExternalController extends Controller {
         $invoice->sale_id          = $sale->id;
         $invoice->name             = $plan->name;
         $invoice->description      = $description;
-        $invoice->price            = $plan->price;
-        $invoice->commission       = $plan->commission;
+        $invoice->price            = $sale->price;
+        $invoice->commission       = $sale->commission;
         $invoice->status           = 'pendent';
         $invoice->payment_due_date = $dueDate;
         $invoice->payment_token     = $paymentFeatures['id'] ?? null;
@@ -171,7 +195,7 @@ class SaleExternalController extends Controller {
 
     private function createCommission ($user, $sale, $plan, $dueDate, $paymentFeatures) {
         
-        if ($plan->commission <= 0) {
+        if ($sale->commission <= 0) {
             return;
         }
         
@@ -181,7 +205,7 @@ class SaleExternalController extends Controller {
         $extract->sale_id     = $sale->id;
         $extract->title       = 'Comissão';
         $extract->description = 'Comissão pela venda N '.$sale->id.' - '.$sale->user->name;
-        $extract->value       = $plan->commission;
+        $extract->value       = $sale->commission;
         $extract->payment_date      = $dueDate;
         $extract->payment_token     = $paymentFeatures['id'] ?? null;
         $extract->payment_url       = $paymentFeatures['invoiceUrl'] ?? null;
