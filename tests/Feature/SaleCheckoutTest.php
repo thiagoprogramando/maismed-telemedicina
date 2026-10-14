@@ -147,6 +147,62 @@ class SaleCheckoutTest extends TestCase
         $this->assertCount(0, $this->asaas->charges);
     }
 
+    public function test_checkout_without_seller_uses_the_configured_default_seller(): void
+    {
+        $seller = $this->seller();
+        config(['services.maismed.default_seller' => $seller->uuid]);
+        $plan = Plan::create(['name' => 'Individual', 'price' => 49.90, 'max_users' => 3, 'commission' => 7, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, ['parent_id' => null])->assertRedirect(route('thank-you'));
+
+        $sale = Sale::first();
+
+        $this->assertSame($seller->id, $sale->seller_id);
+        $this->assertEquals(7.00, $sale->commission);
+        $this->assertSame(12, Extract::where('user_id', $seller->id)->count());
+    }
+
+    public function test_checkout_without_any_seller_creates_the_sale_without_commission(): void
+    {
+        $seller = $this->seller();
+        config(['services.maismed.default_seller' => null]);
+        $plan = Plan::create(['name' => 'Individual', 'price' => 49.90, 'max_users' => 3, 'commission' => 7, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, ['parent_id' => ''])->assertRedirect(route('thank-you'));
+
+        $sale = Sale::first();
+
+        $this->assertNull($sale->seller_id);
+        $this->assertEquals(0, $sale->commission);
+        $this->assertSame(12, Invoice::whereNull('user_id')->count());
+        $this->assertSame(0, Extract::count());
+    }
+
+    public function test_unknown_seller_link_is_rejected_before_any_charge(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, ['parent_id' => (string) Str::uuid()])->assertSessionHas('infor');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertCount(0, $this->asaas->charges);
+    }
+
+    public function test_failed_installment_cancels_charges_already_created_in_asaas(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'commission' => 7, 'status' => 'active']);
+        $this->asaas->failAt = 4;
+
+        $this->checkout($plan, $seller)->assertSessionHas('error');
+
+        $this->assertSame(['pay_1', 'pay_2', 'pay_3'], $this->asaas->canceled);
+        $this->assertSame('canceled', Sale::first()->status);
+        $this->assertSame(0, Invoice::count());
+        $this->assertSame(0, Extract::count());
+    }
+
     public function test_adhesion_form_carries_the_simulated_quantity(): void
     {
         $plan = Plan::create(['name' => 'Empresarial', 'type' => 'business', 'price' => 39.90, 'extra_price' => 22.90, 'status' => 'active']);
@@ -163,6 +219,8 @@ class SaleCheckoutTest extends TestCase
 class FakeAssasController extends AssasController
 {
     public array $charges = [];
+    public array $canceled = [];
+    public ?int $failAt = null;
 
     public function createdCustomer($name, $cpfcnpj, $mobilePhone = null, $email = null, $birth_date = null)
     {
@@ -183,10 +241,21 @@ class FakeAssasController extends AssasController
 
     public function createdCharge($customer, $billingType, $installments, $value, $description, $dueDate)
     {
+        if ($this->failAt !== null && count($this->charges) + 1 === $this->failAt) {
+            return false;
+        }
+
         $this->charges[] = number_format((float) $value, 2, '.', '');
 
         $id = 'pay_' . count($this->charges);
 
         return ['id' => $id, 'invoiceUrl' => 'https://example.test/' . $id, 'splits' => []];
+    }
+
+    public function canceledCharge($token)
+    {
+        $this->canceled[] = $token;
+
+        return true;
     }
 }

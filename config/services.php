@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'maismed' => [
+        // UUID do consultor que recebe as vendas feitas por links sem consultor.
+        'default_seller' => env('MAISMED_DEFAULT_SELLER'),
+    ],
+
 ];
