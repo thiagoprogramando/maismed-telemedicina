@@ -53,7 +53,7 @@ class SaleExternalController extends Controller {
 
         $validated = $request->validate([
             'plan_id'        => ['required', 'string'],
-            'parent_id'      => ['required', 'string'],
+            'parent_id'      => ['nullable', 'string'],
             'name'           => ['required', 'string', 'max:255'],
             'document'       => ['required', 'string'],
             'phone'          => ['required', 'string'],
@@ -69,7 +69,6 @@ class SaleExternalController extends Controller {
             'dependents.min'          => 'A quantidade de dependentes não pode ser negativa.',
             'plan_id.required'        => 'Selecione um plano para continuar.',
             'plan_id.string'          => 'O plano selecionado é inválido.',
-            'parent_id.required'      => 'Consultor não identificado. Verifique o link de acesso.',
             'parent_id.string'        => 'O Consultor informado é inválido.',
             'name.required'           => 'Informe seu nome completo.',
             'name.string'             => 'O nome informado é inválido.',
@@ -93,9 +92,13 @@ class SaleExternalController extends Controller {
             return redirect()->back()->withInput()->with('infor', 'Plano indisponível no momento!');
         }
 
-        $seller = User::where('uuid', $validated['parent_id'])->first();
-        if (!$seller) {
-            return redirect()->back()->withInput()->with('infor', 'Falha ao aderir o plano, verifique com seu Consultor!');
+        if (!empty($validated['parent_id'])) {
+            $seller = User::where('uuid', $validated['parent_id'])->first();
+            if (!$seller) {
+                return redirect()->back()->withInput()->with('infor', 'Consultor não identificado. Verifique o link de acesso com seu Consultor!');
+            }
+        } else {
+            $seller = $this->defaultSeller();
         }
 
         // O valor cobrado é sempre recalculado aqui; o total exibido no navegador não é confiável.
@@ -106,74 +109,100 @@ class SaleExternalController extends Controller {
         try {
             $customer = $assasController->createdCustomer($validated['name'], preg_replace('/\D/', '', $validated['document']), preg_replace('/\D/', '', $validated['phone']), $validated['email'], $request->birth_date);
         } catch (\Throwable $e) {
-            Log::error('Falha ao criar cliente no Asaas', ['plan_id' => $plan->uuid, 'seller' => $seller->uuid, 'error' => $e->getMessage()]);
+            Log::error('Falha ao criar cliente no Asaas', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid, 'error' => $e->getMessage()]);
             $customer = false;
         }
 
-        if (isset($customer['error']) && ($customer['error'] === true || $customer == false)) {
+        if (!is_array($customer) || !empty($customer['error']) || empty($customer['user'])) {
             return redirect()->back()->withInput()->with('error', 'Verifique seus dados e tente novamente!');
         }
 
         $sale              = new Sale();
         $sale->uuid        = Str::uuid();
         $sale->user_id     = $customer['user']->id;
-        $sale->seller_id   = $seller->id;
+        $sale->seller_id   = $seller?->id;
         $sale->plan_id     = $plan->id;
         $sale->name        = $plan->name;
         $sale->description = $plan->name;
         $sale->price       = $quote['price'];
-        $sale->commission  = $quote['commission'];
+        $sale->commission  = $seller ? $quote['commission'] : 0;
         $sale->quantity    = $quote['quantity'];
         $sale->dependents  = $quote['dependents'];
         $sale->status      = 'pendent';
-        if ($sale->save()) {
+        if (!$sale->save()) {
+            Log::error('Falha ao salvar venda do checkout', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid]);
+            return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, tente novamente!');
+        }
 
-            try {
-                switch ($validated['payment_method']) {
-                    case 'CREDIT_CARD':
-                        $this->processInstallmentPlan($assasController, $customer['id'], $sale, 'CREDIT_CARD', $seller, $plan, $validated['due_date'], $validated['payment_method']);
-                        break;
-                    case 'PIX':
-                    case 'BOLETO':
-                        $this->processInstallmentPlan($assasController, $customer['id'], $sale, $validated['payment_method'], $seller, $plan, $validated['due_date'], $validated['payment_method']);
-                        break;
-                    default:
-                        return redirect()->back()->withInput()->with('error', 'Método de pagamento inválido!');
-                }
-            } catch (\RuntimeException $e) {
-                Log::error('Falha ao processar cobrança/assinatura de plano', ['plan_id' => $plan->uuid, 'seller'  => $seller->uuid, 'error'   => $e->getMessage()]);
-                return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, nossa equipe entrará em contato com você!');
-            }
-    
-            return redirect()->route('thank-you')->withInput()->with('success', 'Plano contratado com sucesso!');
-        }              
+        try {
+            $this->processInstallmentPlan($assasController, $customer['id'], $sale, $validated['payment_method'], $seller, $plan, $validated['due_date'], $validated['payment_method']);
+        } catch (\RuntimeException $e) {
+            Log::error('Falha ao processar cobrança/assinatura de plano', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid, 'sale' => $sale->uuid, 'error' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, nossa equipe entrará em contato com você!');
+        }
+
+        return redirect()->route('thank-you')->withInput()->with('success', 'Plano contratado com sucesso!');
     }
 
-    private function processInstallmentPlan(AssasController $assasController, $customer, $sale, string $billingType, User $seller, Plan $plan, int $dueDay, string $paymentMethod): void {
-        DB::transaction(function () use ($assasController, $customer, $sale, $billingType, $seller, $plan, $dueDay, $paymentMethod) {
-            for ($i = 1; $i <= self::INSTALLMENTS; $i++) {
-                $dueDate = $i === 1 ? now()->addDays(self::FIRST_DUE_DAYS) : now()->startOfMonth()->addMonths($i)->day($dueDay);
-                try {
-                    $charge = $assasController->createdCharge($customer, $billingType, 1, $sale->price, 'Plano: ' . $plan->name, $dueDate);
-                } catch (\Throwable $e) {
-                    throw new \RuntimeException("Erro ao gerar cobrança da parcela {$i}: " . $e->getMessage());
-                }
- 
-                if ($charge === false) {
-                    throw new \RuntimeException("Cobrança da parcela {$i} recusada pelo Asaas.");
-                }
-                
-                $this->createInvoice($seller, $sale, $plan, $i === 1 && $paymentMethod === 'CREDIT_CARD' ? 'Plano: ' . $plan->name : "Parcela {$i} do plano: " . $plan->name, $paymentMethod, $dueDay, $dueDate, $charge);
-                $this->createCommission($seller, $sale, $plan, $dueDate, $charge);
-            }
-        });
+    private function defaultSeller(): ?User {
+
+        $uuid = config('services.maismed.default_seller');
+        if (empty($uuid)) {
+            return null;
+        }
+
+        $seller = User::where('uuid', $uuid)->first();
+        if (!$seller) {
+            Log::warning('Consultor padrão do checkout não encontrado', ['uuid' => $uuid]);
+        }
+
+        return $seller;
     }
- 
-    private function createInvoice(User $seller, Sale $sale, Plan $plan, $description, $paymentMethod, $dueDay, $dueDate, $paymentFeatures): Invoice {
+
+    private function processInstallmentPlan(AssasController $assasController, $customer, Sale $sale, string $billingType, ?User $seller, Plan $plan, int $dueDay, string $paymentMethod): void {
+
+        $chargeIds = [];
+
+        try {
+            DB::transaction(function () use ($assasController, $customer, $sale, $billingType, $seller, $plan, $dueDay, $paymentMethod, &$chargeIds) {
+                for ($i = 1; $i <= self::INSTALLMENTS; $i++) {
+                    $dueDate = $i === 1 ? now()->addDays(self::FIRST_DUE_DAYS) : now()->startOfMonth()->addMonths($i)->day($dueDay);
+                    try {
+                        $charge = $assasController->createdCharge($customer, $billingType, 1, $sale->price, 'Plano: ' . $plan->name, $dueDate);
+                    } catch (\Throwable $e) {
+                        throw new \RuntimeException("Erro ao gerar cobrança da parcela {$i}: " . $e->getMessage());
+                    }
+
+                    if ($charge === false || empty($charge['id'])) {
+                        throw new \RuntimeException("Cobrança da parcela {$i} recusada pelo Asaas.");
+                    }
+
+                    $chargeIds[] = $charge['id'];
+
+                    $this->createInvoice($seller, $sale, $plan, $i === 1 && $paymentMethod === 'CREDIT_CARD' ? 'Plano: ' . $plan->name : "Parcela {$i} do plano: " . $plan->name, $paymentMethod, $dueDay, $dueDate, $charge);
+                    $this->createCommission($seller, $sale, $plan, $dueDate, $charge);
+                }
+            });
+        } catch (\Throwable $e) {
+            // O rollback do banco não desfaz o Asaas: as cobranças já emitidas precisam ser canceladas lá.
+            foreach ($chargeIds as $chargeId) {
+                if (!$assasController->canceledCharge($chargeId)) {
+                    Log::error('Cobrança órfã no Asaas após falha no checkout', ['sale' => $sale->uuid, 'payment' => $chargeId]);
+                }
+            }
+
+            $sale->status = 'canceled';
+            $sale->save();
+
+            throw $e instanceof \RuntimeException ? $e : new \RuntimeException($e->getMessage(), 0, $e);
+        }
+    }
+
+    private function createInvoice(?User $seller, Sale $sale, Plan $plan, $description, $paymentMethod, $dueDay, $dueDate, $paymentFeatures): Invoice {
         
         $invoice                   = new Invoice();
         $invoice->uuid             = Str::uuid();
-        $invoice->user_id          = $seller->id;
+        $invoice->user_id          = $seller?->id;
         $invoice->sale_id          = $sale->id;
         $invoice->name             = $plan->name;
         $invoice->description      = $description;
@@ -193,9 +222,9 @@ class SaleExternalController extends Controller {
         return $invoice;
     }
 
-    private function createCommission ($user, $sale, $plan, $dueDate, $paymentFeatures) {
+    private function createCommission (?User $user, $sale, $plan, $dueDate, $paymentFeatures) {
         
-        if ($sale->commission <= 0) {
+        if (!$user || $sale->commission <= 0) {
             return;
         }
         
