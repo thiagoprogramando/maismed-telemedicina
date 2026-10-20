@@ -9,6 +9,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Invoice;
 use App\Models\Sale;
+use App\Support\AssasConfig;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,6 +104,11 @@ class SaleExternalController extends Controller {
 
         // O valor cobrado é sempre recalculado aqui; o total exibido no navegador não é confiável.
         $quote = $plan->quote($validated['quantity'] ?? null, $validated['dependents'] ?? null);
+
+        if (!AssasConfig::isConfigured()) {
+            Log::error('Checkout bloqueado: Asaas sem URL/token (.env ou admin/gateway).');
+            return redirect()->back()->withInput()->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
+        }
 
         $assasController = app(AssasController::class);
 

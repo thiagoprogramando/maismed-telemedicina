@@ -10,6 +10,7 @@ use App\Http\Controllers\Plan\PlanController;
 use App\Http\Controllers\Sale\SaleController;
 use App\Http\Controllers\Sale\SaleExternalController;
 use App\Http\Controllers\User\UserController;
+use App\Http\Controllers\Gateway\GatewayController;
 
 Route::get('/', [LoginController::class, 'index'])->name('login');
 Route::post('logon', [LoginController::class, 'logon'])->name('logon');
@@ -44,6 +45,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/created-user', [UserController::class, 'store'])->name('created-user');
     Route::post('/updated-user/{uuid}', [UserController::class, 'update'])->name('updated-user');
     Route::post('/deleted-user/{uuid}', [UserController::class, 'destroy'])->name('deleted-user');
+
+    Route::get('/gateway', [GatewayController::class, 'index'])->name('gateway');
+    Route::post('/updated-gateway', [GatewayController::class, 'update'])->name('updated-gateway');
 
     Route::get('logout', [LoginController::class, 'logout'])->name('logout');
 });

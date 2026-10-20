@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Extract;
 use App\Models\User;
 use App\Models\Invoice;
+use App\Support\AssasConfig;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 use Carbon\Carbon;
@@ -17,10 +17,34 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
 class AssasController extends Controller {
+
+    private function headers(): array {
+        return [
+            'Content-Type' => 'application/json',
+            'accept'       => 'application/json',
+            'access_token' => AssasConfig::token(),
+            'User-Agent'   => config('app.name'),
+        ];
+    }
+
+    private function ensureConfigured(): bool {
+        if (AssasConfig::isConfigured()) {
+            return true;
+        }
+
+        Log::error('Asaas sem URL/token configurados (.env ou admin/gateway).');
+        return false;
+    }
     
     public function createdCustomer($name, $cpfcnpj, $mobilePhone = null, $email = null, $birth_date = null) {
         
         try {
+            if (!$this->ensureConfigured()) {
+                return [
+                    'error'   => true,
+                    'message' => 'Gateway de pagamento não configurado. Contate o administrador.',
+                ];
+            }
 
             $existingUser = User::where('document', $cpfcnpj)->first();
             if ($existingUser && !empty($existingUser->token)) {
@@ -36,12 +60,7 @@ class AssasController extends Controller {
     
             $client     = new Client();
             $options    = [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'accept'       => 'application/json',
-                    'access_token' => env('API_TOKEN_ASSAS'),
-                    'User-Agent'   => env('APP_NAME')
-                ],
+                'headers' => $this->headers(),
                 'json' => [
                     'name'                 => $name,
                     'cpfCnpj'              => $cpfcnpj,
@@ -52,7 +71,7 @@ class AssasController extends Controller {
                 'verify' => !app()->environment('local'),
             ];
     
-            $response = $client->post(env('API_URL_ASSAS') . 'v3/customers', $options);
+            $response = $client->post(AssasConfig::url() . 'v3/customers', $options);
             $body     = (string) $response->getBody();
             $data     = json_decode($body, true);
     
@@ -112,41 +131,49 @@ class AssasController extends Controller {
     public function createdCharge ($customer, $billingType, $installments, $value, $description, $dueDate) {
         
         try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
             $client = new Client();
+            $count  = max(1, (int) ($installments ?? 1));
+            $amount = number_format((float) $value, 2, '.', '');
+
+            // Cobrança avulsa: só value. Parcelamento Asaas: installmentCount + installmentValue.
+            $payload = [
+                'customer'          => $customer,
+                'billingType'       => $billingType,
+                'value'             => $amount,
+                'dueDate'           => Carbon::parse($dueDate)->format('Y-m-d'),
+                'description'       => $description,
+                'isAddressRequired' => false,
+            ];
+
+            if ($count > 1) {
+                $payload['installmentCount'] = $count;
+                $payload['installmentValue'] = number_format(((float) $value) / $count, 2, '.', '');
+            }
     
             $options = [
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'access_token' => env('API_TOKEN_ASSAS'),
-                    'User-Agent'   => env('APP_NAME')
-                ],
-                'json' => [
-                    'customer'          => $customer,
-                    'billingType'       => $billingType,
-                    'installmentCount'  => $installments ?? 1,
-                    'installmentValue'  => number_format(($value / ($installments ?? 1)), 2, '.', ''),
-                    'value'             => number_format($value, 2, '.', ''),
-                    'dueDate'           => Carbon::parse($dueDate)->toIso8601String(),
-                    'description'       => $description, 
-                    'isAddressRequired' => false,
-                ],
-                'verify' => false
+                'headers' => $this->headers(),
+                'json'    => $payload,
+                'verify'  => !app()->environment('local'),
             ];
     
-            $response =  $client->post(env('API_URL_ASSAS') . 'v3/payments', $options);
-            $body       = (string) $response->getBody();
+            $response = $client->post(AssasConfig::url() . 'v3/payments', $options);
+            $body     = (string) $response->getBody();
     
             if ($response->getStatusCode() === 200) {
                 $data = json_decode($body, true);
                 return [
-                    'id'            => $data['id'],
-                    'invoiceUrl'    => $data['invoiceUrl'],
-                    'splits'        => $data['split'] ?? [],
+                    'id'         => $data['id'],
+                    'invoiceUrl' => $data['invoiceUrl'] ?? null,
+                    'splits'     => $data['split'] ?? [],
                 ];
-            } else {
-                Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $body);
-                return false;
             }
+
+            Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $body);
+            return false;
         } catch (\Exception $e) {
             Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $e->getMessage());
             return false;
@@ -156,17 +183,17 @@ class AssasController extends Controller {
     public function canceledCharge ($token) {
         
         try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
             $client = new Client();
             $options = [
-                'headers' => [
-                    'Content-Type'  => 'application/json',
-                    'access_token'  => env('API_TOKEN_ASSAS'),
-                    'User-Agent'    => env('APP_NAME')
-                ],
-                'verify' => false
+                'headers' => $this->headers(),
+                'verify'  => !app()->environment('local'),
             ];
 
-            $response = $client->delete(env('API_URL_ASSAS') . 'v3/payments/' . $token, $options);
+            $response = $client->delete(AssasConfig::url() . 'v3/payments/' . $token, $options);
             if ($response->getStatusCode() === 200) {
                 $data = json_decode((string) $response->getBody(), true);
                 return isset($data['deleted']) && $data['deleted'] === true;

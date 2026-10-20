@@ -26,6 +26,11 @@ class SaleCheckoutTest extends TestCase
         // O Asaas real nunca é chamado: o controller é trocado por um dublê que registra as cobranças.
         $this->asaas = new FakeAssasController();
         $this->app->instance(AssasController::class, $this->asaas);
+
+        config([
+            'services.asaas.url'   => 'https://sandbox.asaas.com/api/',
+            'services.asaas.token' => 'test_token',
+        ]);
     }
 
     private function seller(): User

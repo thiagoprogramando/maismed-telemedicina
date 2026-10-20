@@ -11,7 +11,7 @@
         <title>{{ env('APP_NAME') }} - {{ env('APP_DESCRIPTION') }}</title>
 
         <link rel="icon" href="{{ asset('Assets/img/logo.png') }}" type="image/png">
-        <link href="vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
+        <link href="{{ asset('Assets/vendor/fontawesome-free/css/all.min.css') }}" rel="stylesheet" type="text/css">
         <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
         <link href="{{ asset('Assets/css/sb-admin-2.css') }}" rel="stylesheet">
@@ -137,8 +137,13 @@
                                                     </div>
                                                 </div>
                                                 <div class="tab-pane fade" id="terms">
-                                                    <div class="editor">
-                                                        {!! $plan->terms !!}
+                                                    <div class="contract-wrap mb-3">
+                                                        <div class="editor contract-preview" id="contract-preview">
+                                                            {!! $plan->terms !!}
+                                                        </div>
+                                                        <button type="button" class="btn btn-link btn-sm px-0" id="contract-toggle" aria-expanded="false">
+                                                            Leia completo
+                                                        </button>
                                                     </div>
                                                     
                                                     <div class="row">
@@ -183,6 +188,27 @@
         <script src="{{ asset('Assets/js/mask.js') }}"></script>
         <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
         <script src="{{ asset('Assets/js/plan-card.js') }}"></script>
+        <style>
+            .contract-preview {
+                max-height: 140px;
+                overflow: hidden;
+                position: relative;
+                transition: max-height 0.25s ease;
+            }
+            .contract-preview.is-expanded {
+                max-height: none;
+            }
+            .contract-preview:not(.is-expanded)::after {
+                content: '';
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: 48px;
+                background: linear-gradient(transparent, #fff);
+                pointer-events: none;
+            }
+        </style>
         <script>
             lucide.createIcons();
 
@@ -225,6 +251,13 @@
             function changeTab() {
                 $('#terms-tab').click();
             }
+
+            $('#contract-toggle').on('click', function () {
+                var $preview = $('#contract-preview');
+                var expanded = $preview.toggleClass('is-expanded').hasClass('is-expanded');
+                $(this).attr('aria-expanded', expanded ? 'true' : 'false')
+                    .text(expanded ? 'Mostrar menos' : 'Leia completo');
+            });
         </script>
     </body>
 </html>

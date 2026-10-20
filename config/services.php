@@ -40,4 +40,9 @@ return [
         'default_seller' => env('MAISMED_DEFAULT_SELLER'),
     ],
 
+    'asaas' => [
+        'url'   => env('API_URL_ASSAS'),
+        'token' => env('API_TOKEN_ASSAS'),
+    ],
+
 ];

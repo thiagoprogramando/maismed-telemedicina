@@ -63,6 +63,8 @@
                             <div class="bg-white py-2 collapse-inner rounded">
                                 <h6 class="collapse-header">PESSOAS:</h6>
                                     <a class="collapse-item" href="{{ route('users') }}">Pessoas & Usuários</a>
+                                <h6 class="collapse-header">INTEGRAÇÕES:</h6>
+                                    <a class="collapse-item" href="{{ route('gateway') }}">Gateway de Pagamento</a>
                             </div>
                         </div>
                     </li>
