@@ -1,6 +1,13 @@
+function maskCpf(input) {
+    let value = input.value.replace(/\D/g, '').slice(0, 11);
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    input.value = value;
+}
+
 function maskCpfCnpj(input) {
-    let value = input.value;
-    value = value.replace(/\D/g, '');
+    let value = input.value.replace(/\D/g, '').slice(0, 14);
 
     if (value.length <= 11) {
         value = value.replace(/(\d{3})(\d)/, '$1.$2');
@@ -10,10 +17,41 @@ function maskCpfCnpj(input) {
         value = value.replace(/^(\d{2})(\d)/, '$1.$2');
         value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
         value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
-        value = value.replace(/(\d{4})(\d)/, '$1-$2');
+        value = value.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
     }
 
     input.value = value;
+}
+
+function isValidCpf(value) {
+    const cpf = String(value || '').replace(/\D/g, '');
+
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) {
+        return false;
+    }
+
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+        sum += parseInt(cpf.charAt(i), 10) * (10 - i);
+    }
+    let rest = (sum * 10) % 11;
+    if (rest === 10) {
+        rest = 0;
+    }
+    if (rest !== parseInt(cpf.charAt(9), 10)) {
+        return false;
+    }
+
+    sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += parseInt(cpf.charAt(i), 10) * (11 - i);
+    }
+    rest = (sum * 10) % 11;
+    if (rest === 10) {
+        rest = 0;
+    }
+
+    return rest === parseInt(cpf.charAt(10), 10);
 }
 
 function maskPhone(phoneInput) {

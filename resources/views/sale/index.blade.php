@@ -229,7 +229,7 @@
                         </div>
                         <div class="mb-3">
                             <label for="member-document" class="form-label">CPF</label>
-                            <input type="text" class="form-control" id="member-document" oninput="maskCpfCnpj(this)" placeholder="000.000.000-00" inputmode="numeric">
+                            <input type="text" class="form-control" id="member-document" oninput="maskCpf(this)" placeholder="000.000.000-00" inputmode="numeric" maxlength="14" autocomplete="off">
                         </div>
                         <div class="mb-3">
                             <label for="member-kinship" class="form-label">{{ $plan->isBusiness() ? 'Vínculo / Cargo' : 'Grau de parentesco' }}</label>
@@ -251,7 +251,7 @@
         <script src="{{ asset('Assets/vendor/jquery-easing/jquery.easing.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sb-admin-2.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sweet-alert.js') }}"></script>
-        <script src="{{ asset('Assets/js/mask.js') }}"></script>
+        <script src="{{ asset('Assets/js/mask.js') }}?v={{ @filemtime(public_path('Assets/js/mask.js')) }}"></script>
         <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
         <script src="{{ asset('Assets/js/plan-card.js') }}?v={{ @filemtime(public_path('Assets/js/plan-card.js')) }}"></script>
         @if ($plan->hasSimulator())

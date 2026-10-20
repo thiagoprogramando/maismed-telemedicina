@@ -142,8 +142,8 @@
                 formDoc.value = member.document;
                 formKinship.value = member.kinship;
                 document.getElementById('member-offcanvas-title').textContent = 'Editar pessoa';
-                if (typeof maskCpfCnpj === 'function') {
-                    maskCpfCnpj(formDoc);
+                if (typeof maskCpf === 'function') {
+                    maskCpf(formDoc);
                 }
             }
             if (offcanvas) {
@@ -256,12 +256,13 @@
             }
 
             var digits = documentValue.replace(/\D/g, '');
-            if (digits.length !== 11) {
+            if (digits.length !== 11 || (typeof isValidCpf === 'function' && !isValidCpf(digits))) {
                 Swal.fire({
                     title: 'Atenção!',
                     text: 'Informe um CPF válido.',
                     icon: 'warning',
                 });
+                formDoc.focus();
                 return;
             }
 
