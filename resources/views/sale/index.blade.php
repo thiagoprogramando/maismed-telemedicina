@@ -144,15 +144,31 @@
                                                 </div>
                                                 @if ($plan->hasSimulator())
                                                     <div class="tab-pane fade" id="members">
-                                                        <p class="text-muted small mb-3">
-                                                            Opcional: cadastre agora os {{ $plan->isBusiness() ? 'funcionários e dependentes' : 'dependentes' }}.
-                                                            Você também pode incluir mais depois da adesão.
-                                                        </p>
-                                                        <div id="members-list"></div>
-                                                        <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-member">
-                                                            + Adicionar pessoa
-                                                        </button>
-                                                        <button type="button" class="btn btn-primary btn-user btn-block" onclick="changeTab()"> Próximo </button>
+                                                        <div id="members-root"
+                                                            data-business="{{ $plan->isBusiness() ? 1 : 0 }}"
+                                                            data-kinships='@json($kinships)'
+                                                            data-employee-keys='@json(\App\Support\Kinship::BUSINESS_EMPLOYEES)'
+                                                            data-old-members='@json(old('members', []))'>
+                                                            <div class="d-flex justify-content-between align-items-start mb-3 gap-2">
+                                                                <div>
+                                                                    <p class="text-muted small mb-1">
+                                                                        Opcional: cadastre agora os {{ $plan->isBusiness() ? 'funcionários e dependentes' : 'dependentes' }}.
+                                                                        Você também pode incluir mais depois.
+                                                                    </p>
+                                                                    <small class="text-primary font-weight-bold">
+                                                                        <span id="members-count">0</span> cadastrados · <span id="members-slots">—</span>
+                                                                    </small>
+                                                                </div>
+                                                                <button type="button" class="btn btn-primary btn-sm" id="add-member">
+                                                                    + Adicionar
+                                                                </button>
+                                                            </div>
+                                                            <div id="members-empty" class="members-empty text-muted small mb-3">
+                                                                Nenhuma pessoa adicionada ainda.
+                                                            </div>
+                                                            <div id="members-list" class="members-list mb-3"></div>
+                                                            <button type="button" class="btn btn-primary btn-user btn-block" onclick="changeTab()"> Próximo </button>
+                                                        </div>
                                                     </div>
                                                 @endif
                                                 <div class="tab-pane fade" id="terms">
@@ -199,14 +215,48 @@
             </div>
         </div>
 
+        @if ($plan->hasSimulator())
+            <div class="offcanvas offcanvas-end" tabindex="-1" id="memberOffcanvas" aria-labelledby="member-offcanvas-title">
+                <div class="offcanvas-header">
+                    <h5 class="offcanvas-title" id="member-offcanvas-title">Adicionar pessoa</h5>
+                    <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Fechar"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <form id="member-form" onsubmit="return false;">
+                        <div class="mb-3">
+                            <label for="member-name" class="form-label">Nome completo</label>
+                            <input type="text" class="form-control" id="member-name" placeholder="Nome completo" autocomplete="name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="member-document" class="form-label">CPF</label>
+                            <input type="text" class="form-control" id="member-document" oninput="maskCpfCnpj(this)" placeholder="000.000.000-00" inputmode="numeric">
+                        </div>
+                        <div class="mb-3">
+                            <label for="member-kinship" class="form-label">{{ $plan->isBusiness() ? 'Vínculo / Cargo' : 'Grau de parentesco' }}</label>
+                            <select class="form-select" id="member-kinship">
+                                <option value="">Selecione</option>
+                                @foreach ($kinships as $key => $label)
+                                    <option value="{{ $key }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-primary w-100" id="member-save">Salvar pessoa</button>
+                    </form>
+                </div>
+            </div>
+        @endif
+
         <script src="{{ asset('Assets/vendor/jquery/jquery.min.js') }}"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
         <script src="{{ asset('Assets/vendor/jquery-easing/jquery.easing.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sb-admin-2.min.js') }}"></script>
         <script src="{{ asset('Assets/js/sweet-alert.js') }}"></script>
         <script src="{{ asset('Assets/js/mask.js') }}"></script>
         <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
-        <script src="{{ asset('Assets/js/plan-card.js') }}"></script>
+        <script src="{{ asset('Assets/js/plan-card.js') }}?v={{ @filemtime(public_path('Assets/js/plan-card.js')) }}"></script>
+        @if ($plan->hasSimulator())
+            <script src="{{ asset('Assets/js/sale-members.js') }}?v={{ @filemtime(public_path('Assets/js/sale-members.js')) }}"></script>
+        @endif
         <style>
             .contract-preview {
                 max-height: 140px;
@@ -226,6 +276,45 @@
                 height: 48px;
                 background: linear-gradient(transparent, #fff);
                 pointer-events: none;
+            }
+            .members-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .member-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 12px 14px;
+                border: 1px solid #e5e7eb;
+                border-radius: 12px;
+                background: #f8fafc;
+            }
+            .member-item-main {
+                min-width: 0;
+            }
+            .member-item-main strong {
+                display: block;
+                font-size: 14px;
+                color: #111827;
+            }
+            .member-item-main small {
+                display: block;
+                color: #6b7280;
+                font-size: 12px;
+            }
+            .member-item-actions {
+                display: flex;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            .members-empty {
+                padding: 16px;
+                border: 1px dashed #d1d5db;
+                border-radius: 12px;
+                text-align: center;
             }
         </style>
         <script>
@@ -276,67 +365,6 @@
                 @endif
                 $('#terms-tab').click();
             }
-
-            @if ($plan->hasSimulator())
-            (function () {
-                var list = document.getElementById('members-list');
-                var index = 0;
-                var kinships = @json($kinships);
-                var oldMembers = @json(old('members', []));
-
-                function kinshipOptions(selected) {
-                    return Object.keys(kinships).map(function (key) {
-                        return '<option value="' + key + '"' + (selected === key ? ' selected' : '') + '>' + kinships[key] + '</option>';
-                    }).join('');
-                }
-
-                function addRow(data) {
-                    data = data || {};
-                    var i = index++;
-                    var row = document.createElement('div');
-                    row.className = 'border rounded p-2 mb-2 member-row';
-                    row.innerHTML =
-                        '<div class="row g-2 align-items-end">' +
-                            '<div class="col-12 col-md-4">' +
-                                '<small>Nome</small>' +
-                                '<input type="text" name="members[' + i + '][name]" class="form-control" value="' + (data.name || '') + '" placeholder="Nome completo">' +
-                            '</div>' +
-                            '<div class="col-6 col-md-3">' +
-                                '<small>CPF</small>' +
-                                '<input type="text" name="members[' + i + '][document]" class="form-control" value="' + (data.document || '') + '" oninput="maskCpfCnpj(this)" placeholder="CPF">' +
-                            '</div>' +
-                            '<div class="col-6 col-md-3">' +
-                                '<small>{{ $plan->isBusiness() ? "Vínculo / Cargo" : "Grau de parentesco" }}</small>' +
-                                '<select name="members[' + i + '][kinship]" class="form-control">' +
-                                    '<option value="">Selecione</option>' + kinshipOptions(data.kinship || '') +
-                                '</select>' +
-                            '</div>' +
-                            '<div class="col-12 col-md-2">' +
-                                '<button type="button" class="btn btn-outline-danger btn-sm w-100 remove-member">Remover</button>' +
-                            '</div>' +
-                        '</div>';
-                    list.appendChild(row);
-                }
-
-                document.getElementById('add-member').addEventListener('click', function () {
-                    addRow();
-                });
-
-                list.addEventListener('click', function (event) {
-                    if (event.target.classList.contains('remove-member')) {
-                        event.target.closest('.member-row').remove();
-                    }
-                });
-
-                if (oldMembers.length) {
-                    oldMembers.forEach(function (member) {
-                        if (member && (member.name || member.document)) {
-                            addRow(member);
-                        }
-                    });
-                }
-            })();
-            @endif
 
             $('#contract-toggle').on('click', function () {
                 var $preview = $('#contract-preview');

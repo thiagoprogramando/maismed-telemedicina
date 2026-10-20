@@ -41,7 +41,7 @@
         </div>
 
         <script src="{{ asset('Assets/vendor/lucide/lucide.min.js') }}"></script>
-        <script src="{{ asset('Assets/js/plan-card.js') }}"></script>
+        <script src="{{ asset('Assets/js/plan-card.js') }}?v={{ @filemtime(public_path('Assets/js/plan-card.js')) }}"></script>
         <script>
             lucide.createIcons();
         </script>

@@ -10,6 +10,8 @@
         return count === 1 ? singular : pluralForm;
     }
 
+    const registry = [];
+
     function initCard(card) {
 
         const data = card.dataset;
@@ -115,6 +117,21 @@
                 const text = 'Olá! Quero o plano ' + plan.name + (result.message ? ' ' + result.message : '') + ', total ' + money(result.total) + data.suffix;
                 whatsapp.href = 'https://wa.me/' + whatsapp.dataset.wa + '?text=' + encodeURIComponent(text);
             }
+
+            card.dispatchEvent(new CustomEvent('plan-card:change', {
+                bubbles: true,
+                detail: { qty: state.qty, dep: state.dep, business: plan.business, max: plan.max, total: result.total },
+            }));
+        }
+
+        function setValue(target, value) {
+            const range = limits[target];
+            const next  = Math.max(range[0], Math.min(range[1], parseInt(value, 10) || range[0]));
+            if (state[target] !== next) {
+                state[target] = next;
+                render();
+            }
+            return state[target];
         }
 
         card.querySelectorAll('.pc-step').forEach(function (button) {
@@ -128,10 +145,40 @@
             });
         });
 
+        const api = {
+            card: card,
+            getState: function () {
+                return { qty: state.qty, dep: state.dep, business: plan.business, max: plan.max };
+            },
+            setQty: function (value) { return setValue('qty', value); },
+            setDep: function (value) { return setValue('dep', value); },
+            bumpQty: function () { return setValue('qty', state.qty + 1); },
+            bumpDep: function () { return setValue('dep', state.dep + 1); },
+        };
+
+        registry.push(api);
         render();
+        return api;
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function ready(fn) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+        } else {
+            fn();
+        }
+    }
+
+    ready(function () {
         document.querySelectorAll('.pc-card').forEach(initCard);
     });
+
+    window.MaisMedPlanCard = {
+        first: function () {
+            return registry[0] || null;
+        },
+        all: function () {
+            return registry.slice();
+        },
+    };
 })();

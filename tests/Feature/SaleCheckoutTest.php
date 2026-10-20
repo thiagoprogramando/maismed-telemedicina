@@ -220,6 +220,8 @@ class SaleCheckoutTest extends TestCase
         $response->assertSee('R$ 467,70');
         $response->assertSee('Dependentes', false);
         $response->assertSee('add-member', false);
+        $response->assertSee('memberOffcanvas', false);
+        $response->assertSee('sale-members.js', false);
     }
 
     public function test_optional_family_members_are_created_and_raise_quantity(): void
