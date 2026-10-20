@@ -61,7 +61,15 @@ class PlanController extends Controller {
         $plan->time         = $request->time;
         $plan->description  = $request->description;
         $plan->terms        = $request->terms;
-        $plan->features     = $request->features;
+
+        //$plan->features     = $request->features;
+        if (!empty($request->features)) {
+            $featuresArray = array_filter(array_map('trim', explode("\n", $request->features)));
+            $plan->features = json_encode(array_values($featuresArray), JSON_UNESCAPED_UNICODE);
+        } else {
+            $plan->features = null;
+        }
+
         if ($plan->save()) {
             return redirect()->route('plan', ['uuid' => $plan->uuid])->with('success', 'Plano cadastrado com sucesso!');
         }
@@ -102,8 +110,12 @@ class PlanController extends Controller {
         if (!empty($request->max_users)) {
             $plan->max_users = $request->max_users;
         }
-        if (!empty($request->features)) {
-            $plan->features = $request->features;
+        // if (!empty($request->features)) {
+        //     $plan->features = $request->features;
+        // }
+        if ($request->has('features')) {
+        $featuresArray = array_filter(array_map('trim', explode("\n", $request->features)));
+        $plan->features = empty($featuresArray) ? null : json_encode(array_values($featuresArray), JSON_UNESCAPED_UNICODE);
         }
         if (!empty($request->type)) {
             $plan->type = $request->type;

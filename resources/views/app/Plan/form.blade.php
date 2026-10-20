@@ -119,11 +119,19 @@
             </div>
             <div class="col-12 mb-2">
                 <div class="form-floating">
-                    <textarea class="form-control" name="features" id="plan_features" placeholder="Benefícios" style="height: 110px">{{ $plan->features ?? '' }}</textarea>
+                    @php
+                        $featuresText = '';
+                        if (!empty($plan->features)) {
+                            // Decodifica o JSON de volta para array e junta com quebras de linha
+                            $featuresArray = is_string($plan->features) ? json_decode($plan->features, true) : $plan->features;
+                            $featuresText = is_array($featuresArray) ? implode("\n", $featuresArray) : $plan->features;
+                        }
+                    @endphp
+                    <textarea class="form-control" name="features" id="plan_features" placeholder="Benefícios" style="height: 110px">{{ $featuresText }}</textarea>
                     <label for="plan_features">Benefícios (um por linha)</label>
                 </div>
                 <small class="text-muted">Cada linha vira um item da lista no card.</small>
-            </div>
+            </div>     
             <div class="col-12 mb-2">
                 <small class="text-muted d-block mb-1">Termo & Contrato</small>
                 <div class="full-editor" style="height: 140px;">{!! $plan->terms ?? '' !!}</div>
