@@ -51,7 +51,6 @@
                 if (extras > 0) {
                     rows.push([extras + ' ' + plural(extras, 'pessoa extra', 'pessoas extras') + ' × ' + money(plan.extra), money(extras * plan.extra)]);
                 }
-                rows.push(['Valor por pessoa', money(Math.round(total / state.qty)) + '/pessoa']);
                 message = 'com ' + state.qty + ' ' + plural(state.qty, 'pessoa', 'pessoas');
             } else {
                 total = plan.price;

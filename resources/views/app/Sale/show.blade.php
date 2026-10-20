@@ -97,6 +97,7 @@
                             <thead>
                                 <tr>
                                     <th>Beneficiário</th>
+                                    <th>Vínculo</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -107,6 +108,7 @@
                                             <strong>{{ $user->name }}</strong> <br>
                                             <small class="text-muted">{{ $user->maskCpfCnpj() }}</small>
                                         </td>
+                                        <td><small class="text-muted">{{ $user->kinshipLabel() }}</small></td>
                                         <td>
                                             <form action="{{ route('deleted-user', ['uuid' => $user->uuid]) }}" method="POST" class="btn-group confirm">
                                                 @csrf
@@ -186,6 +188,17 @@
                             <div class="form-floating">
                                 <input type="text" class="form-control cpfcnpj" name="document" id="document" oninput="maskCpfCnpj(this)" placeholder="CPF/CNPJ">
                                 <label for="document">CPF/CNPJ</label>
+                            </div>
+                        </div>
+                        <div class="col-4 col-md-6 col-lg-6 mb-2">
+                            <div class="form-floating">
+                                <select class="form-select" name="kinship" id="kinship">
+                                    <option value="">Selecione o vínculo</option>
+                                    @foreach (\App\Support\Kinship::options($sale->plan->isBusiness()) as $key => $label)
+                                        <option value="{{ $key }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                <label for="kinship">{{ $sale->plan->isBusiness() ? 'Vínculo / Cargo' : 'Grau de parentesco' }}</label>
                             </div>
                         </div>
                         <div class="col-4 col-md-6 col-lg-6 mb-2">

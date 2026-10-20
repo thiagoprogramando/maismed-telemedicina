@@ -218,6 +218,38 @@ class SaleCheckoutTest extends TestCase
         $response->assertSee('name="quantity" form="sale-form" data-in="qty" value="10"', false);
         $response->assertSee('name="dependents" form="sale-form" data-in="dep" value="3"', false);
         $response->assertSee('R$ 467,70');
+        $response->assertSee('Dependentes', false);
+        $response->assertSee('add-member', false);
+    }
+
+    public function test_optional_family_members_are_created_and_raise_quantity(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Familiar', 'price' => 89.90, 'extra_price' => 22.90, 'included_users' => 4, 'max_users' => 20, 'commission' => 10, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, [
+            'quantity' => 2,
+            'members'  => [
+                ['name' => 'Maria Silva', 'document' => '529.982.247-25', 'kinship' => 'esposa'],
+                ['name' => 'João Silva', 'document' => '390.533.447-05', 'kinship' => 'filho'],
+            ],
+        ])->assertRedirect(route('thank-you'));
+
+        $sale = Sale::first();
+        $titular = User::find($sale->user_id);
+
+        // Titular + 2 dependentes listados = 3 pessoas cobradas.
+        $this->assertEquals(3, $sale->quantity);
+        $this->assertEquals(89.90, $sale->price);
+        $this->assertCount(2, $titular->children);
+        $this->assertSame('esposa', $titular->children->first()->kinship);
+    }
+
+    public function test_plan_card_script_does_not_show_average_price_per_person(): void
+    {
+        $script = file_get_contents(public_path('Assets/js/plan-card.js'));
+
+        $this->assertStringNotContainsString('Valor por pessoa', $script);
     }
 }
 

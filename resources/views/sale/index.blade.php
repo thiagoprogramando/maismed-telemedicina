@@ -47,7 +47,13 @@
                                                         Dados
                                                     </button>
                                                 </li>
-
+                                                @if ($plan->hasSimulator())
+                                                    <li class="nav-item" role="presentation">
+                                                        <button class="nav-link" id="members-tab" data-bs-toggle="tab" data-bs-target="#members" type="button">
+                                                            Dependentes
+                                                        </button>
+                                                    </li>
+                                                @endif
                                                 <li class="nav-item" role="presentation">
                                                     <button class="nav-link" id="terms-tab" data-bs-toggle="tab" data-bs-target="#terms" type="button">
                                                         Contrato
@@ -136,6 +142,19 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                                @if ($plan->hasSimulator())
+                                                    <div class="tab-pane fade" id="members">
+                                                        <p class="text-muted small mb-3">
+                                                            Opcional: cadastre agora os {{ $plan->isBusiness() ? 'funcionários e dependentes' : 'dependentes' }}.
+                                                            Você também pode incluir mais depois da adesão.
+                                                        </p>
+                                                        <div id="members-list"></div>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="add-member">
+                                                            + Adicionar pessoa
+                                                        </button>
+                                                        <button type="button" class="btn btn-primary btn-user btn-block" onclick="changeTab()"> Próximo </button>
+                                                    </div>
+                                                @endif
                                                 <div class="tab-pane fade" id="terms">
                                                     <div class="contract-wrap mb-3">
                                                         <div class="editor contract-preview" id="contract-preview">
@@ -249,8 +268,75 @@
             @endif
 
             function changeTab() {
+                @if ($plan->hasSimulator())
+                    if ($('#details').hasClass('active') || $('#details').hasClass('show')) {
+                        $('#members-tab').click();
+                        return;
+                    }
+                @endif
                 $('#terms-tab').click();
             }
+
+            @if ($plan->hasSimulator())
+            (function () {
+                var list = document.getElementById('members-list');
+                var index = 0;
+                var kinships = @json($kinships);
+                var oldMembers = @json(old('members', []));
+
+                function kinshipOptions(selected) {
+                    return Object.keys(kinships).map(function (key) {
+                        return '<option value="' + key + '"' + (selected === key ? ' selected' : '') + '>' + kinships[key] + '</option>';
+                    }).join('');
+                }
+
+                function addRow(data) {
+                    data = data || {};
+                    var i = index++;
+                    var row = document.createElement('div');
+                    row.className = 'border rounded p-2 mb-2 member-row';
+                    row.innerHTML =
+                        '<div class="row g-2 align-items-end">' +
+                            '<div class="col-12 col-md-4">' +
+                                '<small>Nome</small>' +
+                                '<input type="text" name="members[' + i + '][name]" class="form-control" value="' + (data.name || '') + '" placeholder="Nome completo">' +
+                            '</div>' +
+                            '<div class="col-6 col-md-3">' +
+                                '<small>CPF</small>' +
+                                '<input type="text" name="members[' + i + '][document]" class="form-control" value="' + (data.document || '') + '" oninput="maskCpfCnpj(this)" placeholder="CPF">' +
+                            '</div>' +
+                            '<div class="col-6 col-md-3">' +
+                                '<small>{{ $plan->isBusiness() ? "Vínculo / Cargo" : "Grau de parentesco" }}</small>' +
+                                '<select name="members[' + i + '][kinship]" class="form-control">' +
+                                    '<option value="">Selecione</option>' + kinshipOptions(data.kinship || '') +
+                                '</select>' +
+                            '</div>' +
+                            '<div class="col-12 col-md-2">' +
+                                '<button type="button" class="btn btn-outline-danger btn-sm w-100 remove-member">Remover</button>' +
+                            '</div>' +
+                        '</div>';
+                    list.appendChild(row);
+                }
+
+                document.getElementById('add-member').addEventListener('click', function () {
+                    addRow();
+                });
+
+                list.addEventListener('click', function (event) {
+                    if (event.target.classList.contains('remove-member')) {
+                        event.target.closest('.member-row').remove();
+                    }
+                });
+
+                if (oldMembers.length) {
+                    oldMembers.forEach(function (member) {
+                        if (member && (member.name || member.document)) {
+                            addRow(member);
+                        }
+                    });
+                }
+            })();
+            @endif
 
             $('#contract-toggle').on('click', function () {
                 var $preview = $('#contract-preview');

@@ -27,7 +27,7 @@ class GatewayConfigTest extends TestCase
         $this->actingAs($admin)
             ->get('/gateway')
             ->assertOk()
-            ->assertSee('Gateway de Pagamento', false);
+            ->assertSee('GATEWAY DE PAGAMENTO', false);
 
         $this->actingAs($admin)
             ->post('/updated-gateway', [

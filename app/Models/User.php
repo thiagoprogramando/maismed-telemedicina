@@ -36,6 +36,7 @@ class User extends Authenticatable {
         'wallet',
         'status',
         'roles',
+        'kinship',
     ];
 
     public function parent() {
@@ -44,6 +45,10 @@ class User extends Authenticatable {
 
     public function children() {
         return $this->hasMany(User::class, 'parent_id');
+    }
+
+    public function kinshipLabel(): string {
+        return \App\Support\Kinship::label($this->kinship);
     }
 
     public function invoices() {

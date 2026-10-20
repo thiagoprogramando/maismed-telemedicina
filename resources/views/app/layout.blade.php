@@ -21,7 +21,7 @@
 
         <div id="wrapper">
             <ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar">
-                <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
+                <a class="sidebar-brand d-flex align-items-center justify-content-center" href="{{ route('app') }}">
                     <div class="sidebar-brand-icon rotate-n-15">
                         <i class="fas fa-user-md"></i>
                     </div>
@@ -29,44 +29,35 @@
                 </a>
                 <hr class="sidebar-divider my-0">
 
-                <li class="nav-item">
+                <li class="nav-item {{ request()->routeIs('app') ? 'active' : '' }}">
                     <a class="nav-link" href="{{ route('app') }}"> <i class="fas fa-fw fa-tachometer-alt"></i> <span>Dashboard</span></a>
                 </li>
-                <hr class="sidebar-divider">
+
                 @if (Auth::user()->roles == 'collaborator' || Auth::user()->roles == 'admin')
-                    <div class="sidebar-heading"> Vendas </div>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ route('sales') }}"> <i class="fas fa-fw fa-calendar"></i> <span>Beneficiários</span></a>
+                    <hr class="sidebar-divider">
+                    <div class="sidebar-heading">Operação</div>
+                    <li class="nav-item {{ request()->routeIs('sales', 'sale') ? 'active' : '' }}">
+                        <a class="nav-link" href="{{ route('sales') }}"> <i class="fas fa-fw fa-users"></i> <span>Beneficiários</span></a>
+                    </li>
+                    <li class="nav-item {{ request()->routeIs('plans', 'plan') ? 'active' : '' }}">
+                        <a class="nav-link" href="{{ route('plans') }}"> <i class="fas fa-fw fa-clipboard-list"></i> <span>Planos</span></a>
                     </li>
 
-                    <li class="nav-item">
-                        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseTwo" aria-expanded="true" aria-controls="collapseTwo"> <i class="fas fa-shopping-cart fa-cog"></i> <span>Produtos</span> </a>
-                        <div id="collapseTwo" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionSidebar">
-                            <div class="bg-white py-2 collapse-inner rounded">
-                                <h6 class="collapse-header">Produtos:</h6>
-                                    <a class="collapse-item" href="{{ route('plans') }}">Planos</a>
-                            </div>
-                        </div>
-                    </li>
-                    <hr class="sidebar-divider d-none d-md-block">
-
-                    <div class="sidebar-heading"> Finanças </div>
-                    <li class="nav-item">
+                    <hr class="sidebar-divider">
+                    <div class="sidebar-heading">Finanças</div>
+                    <li class="nav-item {{ request()->routeIs('wallet') ? 'active' : '' }}">
                         <a class="nav-link" href="{{ route('wallet', ['uuid' => Auth::user()->uuid]) }}"> <i class="fas fa-fw fa-wallet"></i> <span>Carteira</span></a>
                     </li>
                 @endif
 
                 @if (Auth::user()->roles == 'admin')
-                    <li class="nav-item">
-                        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseThree" aria-expanded="true" aria-controls="collapseThree"> <i class="fas fa-task fa-cog"></i> <span>Gestão</span> </a>
-                        <div id="collapseThree" class="collapse" aria-labelledby="headingTwo" data-parent="#accordionSidebar">
-                            <div class="bg-white py-2 collapse-inner rounded">
-                                <h6 class="collapse-header">PESSOAS:</h6>
-                                    <a class="collapse-item" href="{{ route('users') }}">Pessoas & Usuários</a>
-                                <h6 class="collapse-header">INTEGRAÇÕES:</h6>
-                                    <a class="collapse-item" href="{{ route('gateway') }}">Gateway de Pagamento</a>
-                            </div>
-                        </div>
+                    <hr class="sidebar-divider">
+                    <div class="sidebar-heading">Administração</div>
+                    <li class="nav-item {{ request()->routeIs('users', 'user') ? 'active' : '' }}">
+                        <a class="nav-link" href="{{ route('users') }}"> <i class="fas fa-fw fa-user-cog"></i> <span>Pessoas</span></a>
+                    </li>
+                    <li class="nav-item {{ request()->routeIs('gateway') ? 'active' : '' }}">
+                        <a class="nav-link" href="{{ route('gateway') }}"> <i class="fas fa-fw fa-credit-card"></i> <span>Gateway</span></a>
                     </li>
                 @endif
 

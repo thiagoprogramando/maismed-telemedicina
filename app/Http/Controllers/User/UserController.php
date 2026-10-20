@@ -50,11 +50,14 @@ class UserController extends Controller {
             }
         }
 
+        $isDependent = !empty($request->sale_uuid);
+
         $validated = $request->validate([
-            'name'           => ['required', 'string', 'max:255'],
-            'document'       => ['required', 'string', 'unique:users,document'],
-            'phone'          => ['required', 'string'],
-            'email'          => ['required', 'email'],
+            'name'     => ['required', 'string', 'max:255'],
+            'document' => ['required', 'string', 'unique:users,document'],
+            'phone'    => [$isDependent ? 'nullable' : 'required', 'string'],
+            'email'    => [$isDependent ? 'nullable' : 'required', 'email'],
+            'kinship'  => ['nullable', 'string', 'max:40'],
         ], [
             'name.required'           => 'Informe seu nome completo.',
             'name.string'             => 'O nome informado é inválido.',
@@ -68,15 +71,20 @@ class UserController extends Controller {
             'email.email'             => 'Informe um e-mail válido.',
         ]);
 
+        $document = preg_replace('/\D/', '', $validated['document']);
+
         $user               = new User();
         $user->parent_id    = $request->parent_id ?? Auth::user()->id;
         $user->uuid         = Str::uuid();
-        $user->name         = $request->name;
-        $user->document     = preg_replace('/\D/', '', $request->document);
-        $user->password     = bcrypt(substr(preg_replace('/\D/', '', $request->document), 0, 4));
-        $user->email        = $request->email;
-        $user->phone        = preg_replace('/\D/', '', $request->phone);
-        $user->birth_date   = $request->birth_date;
+        $user->name         = $validated['name'];
+        $user->document     = $document;
+        $user->kinship      = $request->kinship;
+        $user->password     = bcrypt(substr($document, 0, 4));
+        $user->email        = $validated['email'] ?? ('dep.' . $document . '@maismed.local');
+        $user->phone        = preg_replace('/\D/', '', (string) ($validated['phone'] ?? ''));
+        $user->birth_date   = $request->birth_date ?: '1970-01-01';
+        $user->roles        = 'user';
+        $user->status       = 'inactive';
         $user->postal_code          = $request->postal_code;
         $user->address              = $request->address;
         $user->address_number       = $request->address_number;

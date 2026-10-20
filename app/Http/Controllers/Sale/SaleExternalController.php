@@ -10,11 +10,13 @@ use App\Models\User;
 use App\Models\Invoice;
 use App\Models\Sale;
 use App\Support\AssasConfig;
+use App\Support\Kinship;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class SaleExternalController extends Controller {
 
@@ -39,10 +41,11 @@ class SaleExternalController extends Controller {
         $parent = $parent ? User::firstWhere('uuid', $parent) : null;
 
         return view('sale.index', [
-            'plan'   => $plan,
-            'parent' => $parent,
-            'qty'    => old('quantity', $request->query('qty')),
-            'dep'    => old('dependents', $request->query('dep')),
+            'plan'     => $plan,
+            'parent'   => $parent,
+            'qty'      => old('quantity', $request->query('qty')),
+            'dep'      => old('dependents', $request->query('dep')),
+            'kinships' => Kinship::options($plan->isBusiness()),
         ]);
     }
 
@@ -52,46 +55,56 @@ class SaleExternalController extends Controller {
 
     public function store (Request $request) {
 
-        $validated = $request->validate([
-            'plan_id'        => ['required', 'string'],
-            'parent_id'      => ['nullable', 'string'],
-            'name'           => ['required', 'string', 'max:255'],
-            'document'       => ['required', 'string'],
-            'phone'          => ['required', 'string'],
-            'email'          => ['required', 'email'],
-            'payment_method' => ['required', 'in:CREDIT_CARD,PIX,BOLETO'],
-            'due_date'       => ['required', 'integer', 'min:1', 'max:28'],
-            'quantity'       => ['nullable', 'integer', 'min:1'],
-            'dependents'     => ['nullable', 'integer', 'min:0'],
-        ], [
-            'quantity.integer'        => 'A quantidade de pessoas deve ser um número.',
-            'quantity.min'            => 'A quantidade de pessoas deve ser no mínimo :min.',
-            'dependents.integer'      => 'A quantidade de dependentes deve ser um número.',
-            'dependents.min'          => 'A quantidade de dependentes não pode ser negativa.',
-            'plan_id.required'        => 'Selecione um plano para continuar.',
-            'plan_id.string'          => 'O plano selecionado é inválido.',
-            'parent_id.string'        => 'O Consultor informado é inválido.',
-            'name.required'           => 'Informe seu nome completo.',
-            'name.string'             => 'O nome informado é inválido.',
-            'name.max'                => 'O nome não pode ter mais que :max caracteres.',
-            'document.required'       => 'Informe seu CPF ou CNPJ.',
-            'document.string'         => 'O documento informado é inválido.',
-            'phone.required'          => 'Informe um telefone para contato.',
-            'phone.string'            => 'O telefone informado é inválido.',
-            'email.required'          => 'Informe seu e-mail.',
-            'email.email'             => 'Informe um e-mail válido.',
-            'payment_method.required' => 'Selecione uma forma de pagamento.',
-            'payment_method.in'       => 'Forma de pagamento inválida. Escolha entre Cartão de Crédito, Pix ou Boleto.',
-            'due_date.required'       => 'Informe o dia de vencimento das parcelas.',
-            'due_date.integer'        => 'O dia de vencimento deve ser um número.',
-            'due_date.min'            => 'O dia de vencimento deve ser entre :min e :max.',
-            'due_date.max'            => 'O dia de vencimento deve ser entre :min e :max.',
-        ]);
-
-        $plan = Plan::where('uuid', $validated['plan_id'])->first();
+        $plan = Plan::where('uuid', $request->input('plan_id'))->first();
         if (!$plan) {
             return redirect()->back()->withInput()->with('infor', 'Plano indisponível no momento!');
         }
+
+        $kinshipKeys = Kinship::keys($plan->isBusiness());
+
+        $validated = $request->validate([
+            'plan_id'              => ['required', 'string'],
+            'parent_id'            => ['nullable', 'string'],
+            'name'                 => ['required', 'string', 'max:255'],
+            'document'             => ['required', 'string'],
+            'phone'                => ['required', 'string'],
+            'email'                => ['required', 'email'],
+            'payment_method'       => ['required', 'in:CREDIT_CARD,PIX,BOLETO'],
+            'due_date'             => ['required', 'integer', 'min:1', 'max:28'],
+            'quantity'             => ['nullable', 'integer', 'min:1'],
+            'dependents'           => ['nullable', 'integer', 'min:0'],
+            'members'              => ['nullable', 'array'],
+            'members.*.name'       => ['nullable', 'required_with:members.*.document', 'string', 'max:255'],
+            'members.*.document'   => ['nullable', 'required_with:members.*.name', 'string'],
+            'members.*.kinship'    => ['nullable', 'required_with:members.*.name', Rule::in($kinshipKeys)],
+        ], [
+            'quantity.integer'               => 'A quantidade de pessoas deve ser um número.',
+            'quantity.min'                   => 'A quantidade de pessoas deve ser no mínimo :min.',
+            'dependents.integer'             => 'A quantidade de dependentes deve ser um número.',
+            'dependents.min'                 => 'A quantidade de dependentes não pode ser negativa.',
+            'plan_id.required'               => 'Selecione um plano para continuar.',
+            'plan_id.string'                 => 'O plano selecionado é inválido.',
+            'parent_id.string'               => 'O Consultor informado é inválido.',
+            'name.required'                  => 'Informe seu nome completo.',
+            'name.string'                    => 'O nome informado é inválido.',
+            'name.max'                       => 'O nome não pode ter mais que :max caracteres.',
+            'document.required'              => 'Informe seu CPF ou CNPJ.',
+            'document.string'                => 'O documento informado é inválido.',
+            'phone.required'                 => 'Informe um telefone para contato.',
+            'phone.string'                   => 'O telefone informado é inválido.',
+            'email.required'                 => 'Informe seu e-mail.',
+            'email.email'                    => 'Informe um e-mail válido.',
+            'payment_method.required'        => 'Selecione uma forma de pagamento.',
+            'payment_method.in'              => 'Forma de pagamento inválida. Escolha entre Cartão de Crédito, Pix ou Boleto.',
+            'due_date.required'              => 'Informe o dia de vencimento das parcelas.',
+            'due_date.integer'               => 'O dia de vencimento deve ser um número.',
+            'due_date.min'                   => 'O dia de vencimento deve ser entre :min e :max.',
+            'due_date.max'                   => 'O dia de vencimento deve ser entre :min e :max.',
+            'members.*.name.required_with'   => 'Informe o nome de cada dependente.',
+            'members.*.document.required_with' => 'Informe o CPF de cada dependente.',
+            'members.*.kinship.required_with'=> 'Informe o vínculo de cada dependente.',
+            'members.*.kinship.in'           => 'Vínculo informado é inválido.',
+        ]);
 
         if (!empty($validated['parent_id'])) {
             $seller = User::where('uuid', $validated['parent_id'])->first();
@@ -102,8 +115,11 @@ class SaleExternalController extends Controller {
             $seller = $this->defaultSeller();
         }
 
+        $members = $this->normalizeMembers($validated['members'] ?? []);
+        [$quantity, $dependents] = $this->quoteQuantities($plan, $validated['quantity'] ?? null, $validated['dependents'] ?? null, $members);
+
         // O valor cobrado é sempre recalculado aqui; o total exibido no navegador não é confiável.
-        $quote = $plan->quote($validated['quantity'] ?? null, $validated['dependents'] ?? null);
+        $quote = $plan->quote($quantity, $dependents);
 
         if (!AssasConfig::isConfigured()) {
             Log::error('Checkout bloqueado: Asaas sem URL/token (.env ou admin/gateway).');
@@ -140,6 +156,8 @@ class SaleExternalController extends Controller {
             return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, tente novamente!');
         }
 
+        $this->createMembers($customer['user'], $members, $plan->isBusiness());
+
         try {
             $this->processInstallmentPlan($assasController, $customer['id'], $sale, $validated['payment_method'], $seller, $plan, $validated['due_date'], $validated['payment_method']);
         } catch (\RuntimeException $e) {
@@ -148,6 +166,89 @@ class SaleExternalController extends Controller {
         }
 
         return redirect()->route('thank-you')->withInput()->with('success', 'Plano contratado com sucesso!');
+    }
+
+    private function normalizeMembers(array $raw): array {
+        $members = [];
+        $seen    = [];
+
+        foreach ($raw as $row) {
+            $name     = trim((string) ($row['name'] ?? ''));
+            $document = preg_replace('/\D/', '', (string) ($row['document'] ?? ''));
+            $kinship  = (string) ($row['kinship'] ?? '');
+
+            if ($name === '' && $document === '') {
+                continue;
+            }
+
+            if ($document === '' || isset($seen[$document])) {
+                continue;
+            }
+
+            $seen[$document] = true;
+            $members[] = [
+                'name'     => $name,
+                'document' => $document,
+                'kinship'  => $kinship,
+            ];
+        }
+
+        return $members;
+    }
+
+    private function quoteQuantities(Plan $plan, $quantity, $dependents, array $members): array {
+        if ($plan->isBusiness()) {
+            $employees = 0;
+            $deps      = 0;
+            foreach ($members as $member) {
+                if (Kinship::isBusinessEmployee($member['kinship'])) {
+                    $employees++;
+                } else {
+                    $deps++;
+                }
+            }
+
+            return [
+                max((int) ($quantity ?? 1), max(1, $employees)),
+                max((int) ($dependents ?? 0), $deps),
+            ];
+        }
+
+        return [
+            max((int) ($quantity ?? 1), 1 + count($members)),
+            0,
+        ];
+    }
+
+    private function createMembers(User $titular, array $members, bool $business): void {
+        $titularDoc = preg_replace('/\D/', '', (string) $titular->document);
+
+        foreach ($members as $member) {
+            if ($member['document'] === $titularDoc) {
+                continue;
+            }
+
+            if (User::where('document', $member['document'])->exists()) {
+                Log::warning('Dependente ignorado no checkout: CPF já cadastrado', [
+                    'document' => $member['document'],
+                    'titular'  => $titular->uuid,
+                ]);
+                continue;
+            }
+
+            $user             = new User();
+            $user->uuid       = Str::uuid();
+            $user->parent_id  = $titular->id;
+            $user->name       = $member['name'];
+            $user->document   = $member['document'];
+            $user->kinship    = $member['kinship'];
+            $user->email      = 'dep.' . $member['document'] . '@maismed.local';
+            $user->password   = bcrypt(substr($member['document'], 0, 4));
+            $user->birth_date = '1970-01-01';
+            $user->roles      = 'user';
+            $user->status     = 'inactive';
+            $user->save();
+        }
     }
 
     private function defaultSeller(): ?User {
