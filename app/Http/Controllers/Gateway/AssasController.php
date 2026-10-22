@@ -128,14 +128,17 @@ class AssasController extends Controller {
         }
     }
     
-    public function createdCharge ($customer, $billingType, $installments, $value, $description, $dueDate) {
+    public function createdCharge ($customer, $billingType, $installments, $value, $description, $dueDate, array $extras = []) {
         
         try {
             if (!$this->ensureConfigured()) {
                 return false;
             }
 
-            $client = new Client();
+            $client = new Client([
+                'timeout'         => 60,
+                'connect_timeout' => 15,
+            ]);
             $count  = max(1, (int) ($installments ?? 1));
             $amount = number_format((float) $value, 2, '.', '');
 
@@ -153,6 +156,19 @@ class AssasController extends Controller {
                 $payload['installmentCount'] = $count;
                 $payload['installmentValue'] = number_format(((float) $value) / $count, 2, '.', '');
             }
+
+            if (!empty($extras['creditCardToken'])) {
+                $payload['creditCardToken'] = $extras['creditCardToken'];
+            } elseif (!empty($extras['creditCard'])) {
+                $payload['creditCard'] = $extras['creditCard'];
+                if (!empty($extras['creditCardHolderInfo'])) {
+                    $payload['creditCardHolderInfo'] = $extras['creditCardHolderInfo'];
+                }
+            }
+
+            if (!empty($extras['remoteIp'])) {
+                $payload['remoteIp'] = $extras['remoteIp'];
+            }
     
             $options = [
                 'headers' => $this->headers(),
@@ -166,9 +182,11 @@ class AssasController extends Controller {
             if ($response->getStatusCode() === 200) {
                 $data = json_decode($body, true);
                 return [
-                    'id'         => $data['id'],
-                    'invoiceUrl' => $data['invoiceUrl'] ?? null,
-                    'splits'     => $data['split'] ?? [],
+                    'id'              => $data['id'],
+                    'invoiceUrl'      => $data['invoiceUrl'] ?? null,
+                    'status'          => $data['status'] ?? null,
+                    'creditCardToken' => $data['creditCard']['creditCardToken'] ?? ($data['creditCardToken'] ?? null),
+                    'splits'          => $data['split'] ?? [],
                 ];
             }
 
@@ -176,6 +194,40 @@ class AssasController extends Controller {
             return false;
         } catch (\Exception $e) {
             Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function getPixQrCode(string $paymentId) {
+
+        try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
+            $client = new Client([
+                'timeout'         => 30,
+                'connect_timeout' => 10,
+            ]);
+            $response = $client->get(AssasConfig::url() . 'v3/payments/' . $paymentId . '/pixQrCode', [
+                'headers' => $this->headers(),
+                'verify'  => !app()->environment('local'),
+            ]);
+            $body = (string) $response->getBody();
+
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode($body, true);
+                return [
+                    'encodedImage' => $data['encodedImage'] ?? null,
+                    'payload'      => $data['payload'] ?? null,
+                    'expirationDate' => $data['expirationDate'] ?? null,
+                ];
+            }
+
+            Log::error('Erro ao obter QR Code PIX: ' . $body);
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao obter QR Code PIX: ' . $e->getMessage());
             return false;
         }
     }

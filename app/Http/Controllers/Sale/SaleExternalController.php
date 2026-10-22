@@ -9,12 +9,14 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Invoice;
 use App\Models\Sale;
+use App\Mail\SalePaymentMail;
 use App\Support\AssasConfig;
 use App\Support\Kinship;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -70,6 +72,7 @@ class SaleExternalController extends Controller {
             'phone'                => ['required', 'string'],
             'email'                => ['required', 'email'],
             'payment_method'       => ['required', 'in:CREDIT_CARD,PIX,BOLETO'],
+            'pay_timing'           => ['required', 'in:now,later'],
             'due_date'             => ['required', 'integer', 'min:1', 'max:28'],
             'quantity'             => ['nullable', 'integer', 'min:1'],
             'dependents'           => ['nullable', 'integer', 'min:0'],
@@ -77,6 +80,12 @@ class SaleExternalController extends Controller {
             'members.*.name'       => ['nullable', 'required_with:members.*.document', 'string', 'max:255'],
             'members.*.document'   => ['nullable', 'required_with:members.*.name', 'string'],
             'members.*.kinship'    => ['nullable', 'required_with:members.*.name', Rule::in($kinshipKeys)],
+            'card_holder'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:255'],
+            'card_number'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:25'],
+            'card_expiry'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:7'],
+            'card_cvv'             => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:4'],
+            'postal_code'           => ['nullable', 'string', 'max:12'],
+            'address_number'       => ['nullable', 'string', 'max:20'],
         ], [
             'quantity.integer'               => 'A quantidade de pessoas deve ser um número.',
             'quantity.min'                   => 'A quantidade de pessoas deve ser no mínimo :min.',
@@ -96,6 +105,12 @@ class SaleExternalController extends Controller {
             'email.email'                    => 'Informe um e-mail válido.',
             'payment_method.required'        => 'Selecione uma forma de pagamento.',
             'payment_method.in'              => 'Forma de pagamento inválida. Escolha entre Cartão de Crédito, Pix ou Boleto.',
+            'pay_timing.required'            => 'Escolha se deseja pagar agora ou depois.',
+            'pay_timing.in'                  => 'Opção de pagamento inválida.',
+            'card_holder.required'           => 'Informe o nome impresso no cartão.',
+            'card_number.required'           => 'Informe o número do cartão.',
+            'card_expiry.required'           => 'Informe a validade do cartão.',
+            'card_cvv.required'              => 'Informe o CVV do cartão.',
             'due_date.required'              => 'Informe o dia de vencimento das parcelas.',
             'due_date.integer'               => 'O dia de vencimento deve ser um número.',
             'due_date.min'                   => 'O dia de vencimento deve ser entre :min e :max.',
@@ -158,14 +173,76 @@ class SaleExternalController extends Controller {
 
         $this->createMembers($customer['user'], $members, $plan->isBusiness());
 
+        $payNow = ($validated['pay_timing'] ?? 'later') === 'now';
+        $cardExtras = [];
+
+        if ($payNow && $validated['payment_method'] === 'CREDIT_CARD') {
+            $expiry = preg_replace('/\D/', '', (string) $request->input('card_expiry'));
+            if (strlen($expiry) !== 4 && strlen($expiry) !== 6) {
+                return redirect()->back()->withInput()->with('error', 'Validade do cartão inválida. Use MM/AA.');
+            }
+
+            $month = substr($expiry, 0, 2);
+            $year  = strlen($expiry) === 4 ? ('20' . substr($expiry, 2, 2)) : substr($expiry, 2, 4);
+
+            $cardExtras = [
+                'creditCard' => [
+                    'holderName'  => trim((string) $request->input('card_holder')),
+                    'number'      => preg_replace('/\D/', '', (string) $request->input('card_number')),
+                    'expiryMonth' => $month,
+                    'expiryYear'  => $year,
+                    'ccv'         => preg_replace('/\D/', '', (string) $request->input('card_cvv')),
+                ],
+                'creditCardHolderInfo' => [
+                    'name'          => $validated['name'],
+                    'email'         => $validated['email'],
+                    'cpfCnpj'       => preg_replace('/\D/', '', $validated['document']),
+                    'postalCode'     => preg_replace('/\D/', '', (string) ($request->input('postal_code') ?: '00000000')),
+                    'addressNumber' => (string) ($request->input('address_number') ?: 'S/N'),
+                    'phone'         => preg_replace('/\D/', '', $validated['phone']),
+                    'mobilePhone'   => preg_replace('/\D/', '', $validated['phone']),
+                ],
+                'remoteIp' => $request->ip(),
+            ];
+        }
+
         try {
-            $this->processInstallmentPlan($assasController, $customer['id'], $sale, $validated['payment_method'], $seller, $plan, $validated['due_date'], $validated['payment_method']);
+            $paymentResult = $this->processInstallmentPlan(
+                $assasController,
+                $customer['id'],
+                $sale,
+                $validated['payment_method'],
+                $seller,
+                $plan,
+                $validated['due_date'],
+                $validated['payment_method'],
+                $payNow,
+                $cardExtras
+            );
         } catch (\RuntimeException $e) {
             Log::error('Falha ao processar cobrança/assinatura de plano', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid, 'sale' => $sale->uuid, 'error' => $e->getMessage()]);
             return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, nossa equipe entrará em contato com você!');
         }
 
-        return redirect()->route('thank-you')->withInput()->with('success', 'Plano contratado com sucesso!');
+        if (!$payNow) {
+            $this->sendPaymentEmail($customer['user'], $plan, $sale, $validated['payment_method'], $paymentResult['first'] ?? null);
+        }
+
+        return redirect()->route('thank-you')->with([
+            'success' => $payNow
+                ? 'Plano contratado! Finalize o pagamento abaixo.'
+                : 'Plano salvo! Enviamos o link de pagamento para o seu e-mail.',
+            'checkout' => [
+                'pay_now'        => $payNow,
+                'payment_method' => $validated['payment_method'],
+                'plan_name'      => $plan->name,
+                'price'          => (float) $sale->price,
+                'email'          => $validated['email'],
+                'invoice_url'    => $paymentResult['first']['invoiceUrl'] ?? null,
+                'pix'            => $paymentResult['pix'] ?? null,
+                'card_status'    => $paymentResult['first']['status'] ?? null,
+            ],
+        ]);
     }
 
     private function normalizeMembers(array $raw): array {
@@ -266,16 +343,45 @@ class SaleExternalController extends Controller {
         return $seller;
     }
 
-    private function processInstallmentPlan(AssasController $assasController, $customer, Sale $sale, string $billingType, ?User $seller, Plan $plan, int $dueDay, string $paymentMethod): void {
+    private function processInstallmentPlan(
+        AssasController $assasController,
+        $customer,
+        Sale $sale,
+        string $billingType,
+        ?User $seller,
+        Plan $plan,
+        int $dueDay,
+        string $paymentMethod,
+        bool $payNow = false,
+        array $cardExtras = []
+    ): array {
 
         $chargeIds = [];
+        $firstCharge = null;
+        $pix = null;
+        $cardToken = null;
 
         try {
-            DB::transaction(function () use ($assasController, $customer, $sale, $billingType, $seller, $plan, $dueDay, $paymentMethod, &$chargeIds) {
+            DB::transaction(function () use ($assasController, $customer, $sale, $billingType, $seller, $plan, $dueDay, $paymentMethod, $payNow, $cardExtras, &$chargeIds, &$firstCharge, &$cardToken) {
                 for ($i = 1; $i <= self::INSTALLMENTS; $i++) {
-                    $dueDate = $i === 1 ? now()->addDays(self::FIRST_DUE_DAYS) : now()->startOfMonth()->addMonths($i)->day($dueDay);
+                    $dueDate = ($i === 1)
+                        ? ($payNow ? now() : now()->addDays(self::FIRST_DUE_DAYS))
+                        : now()->startOfMonth()->addMonths($i)->day($dueDay);
+
+                    $extras = [];
+                    if ($billingType === 'CREDIT_CARD') {
+                        if ($i === 1 && !empty($cardExtras)) {
+                            $extras = $cardExtras;
+                        } elseif ($cardToken) {
+                            $extras = [
+                                'creditCardToken' => $cardToken,
+                                'remoteIp'        => $cardExtras['remoteIp'] ?? request()->ip(),
+                            ];
+                        }
+                    }
+
                     try {
-                        $charge = $assasController->createdCharge($customer, $billingType, 1, $sale->price, 'Plano: ' . $plan->name, $dueDate);
+                        $charge = $assasController->createdCharge($customer, $billingType, 1, $sale->price, 'Plano: ' . $plan->name, $dueDate, $extras);
                     } catch (\Throwable $e) {
                         throw new \RuntimeException("Erro ao gerar cobrança da parcela {$i}: " . $e->getMessage());
                     }
@@ -284,12 +390,24 @@ class SaleExternalController extends Controller {
                         throw new \RuntimeException("Cobrança da parcela {$i} recusada pelo Asaas.");
                     }
 
+                    if (!empty($charge['creditCardToken'])) {
+                        $cardToken = $charge['creditCardToken'];
+                    }
+
                     $chargeIds[] = $charge['id'];
+
+                    if ($i === 1) {
+                        $firstCharge = $charge;
+                    }
 
                     $this->createInvoice($seller, $sale, $plan, $i === 1 && $paymentMethod === 'CREDIT_CARD' ? 'Plano: ' . $plan->name : "Parcela {$i} do plano: " . $plan->name, $paymentMethod, $dueDay, $dueDate, $charge);
                     $this->createCommission($seller, $sale, $plan, $dueDate, $charge);
                 }
             });
+
+            if ($payNow && $billingType === 'PIX' && !empty($firstCharge['id'])) {
+                $pix = $assasController->getPixQrCode($firstCharge['id']) ?: null;
+            }
         } catch (\Throwable $e) {
             // O rollback do banco não desfaz o Asaas: as cobranças já emitidas precisam ser canceladas lá.
             foreach ($chargeIds as $chargeId) {
@@ -302,6 +420,42 @@ class SaleExternalController extends Controller {
             $sale->save();
 
             throw $e instanceof \RuntimeException ? $e : new \RuntimeException($e->getMessage(), 0, $e);
+        }
+
+        return [
+            'first' => $firstCharge,
+            'pix'   => $pix,
+        ];
+    }
+
+    private function sendPaymentEmail(User $customer, Plan $plan, Sale $sale, string $paymentMethod, ?array $firstCharge): void {
+        if (empty($customer->email) || empty($firstCharge['invoiceUrl'])) {
+            return;
+        }
+
+        $labels = [
+            'CREDIT_CARD' => 'Cartão de Crédito',
+            'PIX'         => 'PIX',
+            'BOLETO'      => 'Boleto Bancário',
+        ];
+
+        try {
+            Mail::to($customer->email)->send(new SalePaymentMail([
+                'subject'              => 'Pagamento do plano ' . $plan->name . ' - ' . config('app.name'),
+                'fromEmail'            => config('mail.from.address'),
+                'fromName'             => config('mail.from.name', config('app.name')),
+                'customer_name'        => $customer->name,
+                'plan_name'            => $plan->name,
+                'price'                => (float) $sale->price,
+                'payment_method_label' => $labels[$paymentMethod] ?? $paymentMethod,
+                'payment_url'          => $firstCharge['invoiceUrl'],
+            ]));
+        } catch (\Throwable $e) {
+            Log::error('Falha ao enviar e-mail de pagamento do checkout', [
+                'sale'  => $sale->uuid,
+                'email' => $customer->email,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

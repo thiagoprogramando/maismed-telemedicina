@@ -182,26 +182,53 @@
                                                     </div>
                                                     
                                                     <div class="row">
-                                                        <div class="form-group col-12 col-md-6 col-lg-6">
-                                                            <small>Forma de Pagamento</small>
-                                                            <select name="payment_method" class="form-control" required>
-                                                                <option value="CREDIT_CARD">Cartão de Crédito</option>
-                                                                <option value="BOLETO">Boleto Bancário</option>
-                                                                <option value="PIX">PIX</option>
+                                                        <div class="form-group col-12 col-md-6">
+                                                            <small>Quando deseja pagar?</small>
+                                                            <select name="pay_timing" id="pay_timing" class="form-control" required>
+                                                                <option value="now" @selected(old('pay_timing', 'now') === 'now')>Pagar agora</option>
+                                                                <option value="later" @selected(old('pay_timing') === 'later')>Pagar depois (enviar por e-mail)</option>
                                                             </select>
                                                         </div>
-                                                        <div class="form-group col-12 col-md-6 col-lg-6">
-                                                            <small>Dia de Vencimento</small>
+                                                        <div class="form-group col-12 col-md-6">
+                                                            <small>Forma de Pagamento</small>
+                                                            <select name="payment_method" id="payment_method" class="form-control" required>
+                                                                <option value="CREDIT_CARD" @selected(old('payment_method') === 'CREDIT_CARD')>Cartão de Crédito</option>
+                                                                <option value="PIX" @selected(old('payment_method', 'PIX') === 'PIX')>PIX</option>
+                                                                <option value="BOLETO" @selected(old('payment_method') === 'BOLETO')>Boleto Bancário</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="form-group col-12 col-md-6">
+                                                            <small>Dia de Vencimento das próximas parcelas</small>
                                                             <select name="due_date" class="form-control" required>
                                                                 <option value="5">5</option>
-                                                                <option value="10">10</option>
+                                                                <option value="10" @selected(old('due_date') == 10)>10</option>
                                                                 <option value="15">15</option>
                                                                 <option value="20">20</option>
                                                             </select>
                                                         </div>
                                                     </div>
+
+                                                    <div id="card-fields" class="border rounded p-3 mb-3 d-none">
+                                                        <p class="small text-muted mb-2">Cadastre o cartão para pagar a 1ª parcela agora e manter a recorrência das demais.</p>
+                                                        <div class="row">
+                                                            <div class="form-group col-12">
+                                                                <input type="text" name="card_holder" id="card_holder" class="form-control" value="{{ old('card_holder') }}" placeholder="Nome impresso no cartão" autocomplete="cc-name">
+                                                            </div>
+                                                            <div class="form-group col-12">
+                                                                <input type="text" name="card_number" id="card_number" class="form-control" value="{{ old('card_number') }}" placeholder="Número do cartão" inputmode="numeric" autocomplete="cc-number" maxlength="19">
+                                                            </div>
+                                                            <div class="form-group col-6">
+                                                                <input type="text" name="card_expiry" id="card_expiry" class="form-control" value="{{ old('card_expiry') }}" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp" maxlength="5">
+                                                            </div>
+                                                            <div class="form-group col-6">
+                                                                <input type="text" name="card_cvv" id="card_cvv" class="form-control" value="{{ old('card_cvv') }}" placeholder="CVV" inputmode="numeric" autocomplete="cc-csc" maxlength="4">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <p class="small text-muted" id="pay-later-hint">Ao escolher pagar depois, salvamos a adesão e enviamos o link de pagamento para o seu e-mail.</p>
                                                     
-                                                    <button type="submit" class="btn btn-primary btn-user btn-block"> Confirmar e continuar </button>
+                                                    <button type="submit" class="btn btn-primary btn-user btn-block" id="checkout-submit"> Confirmar e continuar </button>
                                                 </div>
                                             </div>
                                         </form>
@@ -371,6 +398,35 @@
                 var expanded = $preview.toggleClass('is-expanded').hasClass('is-expanded');
                 $(this).attr('aria-expanded', expanded ? 'true' : 'false')
                     .text(expanded ? 'Mostrar menos' : 'Leia completo');
+            });
+
+            function syncPaymentUi() {
+                var payNow = $('#pay_timing').val() === 'now';
+                var method = $('#payment_method').val();
+                var showCard = payNow && method === 'CREDIT_CARD';
+                $('#card-fields').toggleClass('d-none', !showCard);
+                $('#pay-later-hint').toggleClass('d-none', payNow);
+                $('#checkout-submit').text(payNow ? 'Pagar e finalizar' : 'Salvar e enviar por e-mail');
+            }
+
+            $('#pay_timing, #payment_method').on('change', syncPaymentUi);
+            syncPaymentUi();
+
+            $('#card_number').on('input', function () {
+                var digits = this.value.replace(/\D/g, '').slice(0, 16);
+                this.value = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+            });
+
+            $('#card_expiry').on('input', function () {
+                var digits = this.value.replace(/\D/g, '').slice(0, 4);
+                if (digits.length >= 3) {
+                    digits = digits.slice(0, 2) + '/' + digits.slice(2);
+                }
+                this.value = digits;
+            });
+
+            $('#card_cvv').on('input', function () {
+                this.value = this.value.replace(/\D/g, '').slice(0, 4);
             });
         </script>
     </body>

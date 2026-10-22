@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\Gateway\AssasController;
+use App\Mail\SalePaymentMail;
 use App\Models\Extract;
 use App\Models\Invoice;
 use App\Models\Plan;
@@ -10,6 +11,7 @@ use App\Models\Sale;
 use App\Models\User;
 use Database\Seeders\FirstUser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -31,6 +33,8 @@ class SaleCheckoutTest extends TestCase
             'services.asaas.url'   => 'https://sandbox.asaas.com/api/',
             'services.asaas.token' => 'test_token',
         ]);
+
+        Mail::fake();
     }
 
     private function seller(): User
@@ -51,6 +55,7 @@ class SaleCheckoutTest extends TestCase
             'email'          => 'cliente@example.com',
             'birth_date'     => '1990-01-01',
             'payment_method' => 'PIX',
+            'pay_timing'     => 'later',
             'due_date'       => 10,
         ], $extra));
     }
@@ -253,12 +258,74 @@ class SaleCheckoutTest extends TestCase
 
         $this->assertStringNotContainsString('Valor por pessoa', $script);
     }
+
+    public function test_pay_later_sends_payment_email(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, ['pay_timing' => 'later'])->assertRedirect(route('thank-you'));
+
+        Mail::assertSent(SalePaymentMail::class, function (SalePaymentMail $mail) {
+            return $mail->hasTo('cliente@example.com')
+                && ($mail->data['payment_url'] ?? null) === 'https://example.test/pay_1';
+        });
+    }
+
+    public function test_pay_now_pix_returns_qr_code_on_thank_you_session(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $response = $this->checkout($plan, $seller, [
+            'payment_method' => 'PIX',
+            'pay_timing'     => 'now',
+        ]);
+
+        $response->assertRedirect(route('thank-you'));
+        $response->assertSessionHas('checkout.pix.payload', '00020126580014br.gov.bcb.pix');
+        Mail::assertNothingSent();
+    }
+
+    public function test_pay_now_credit_card_requires_card_fields(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, [
+            'payment_method' => 'CREDIT_CARD',
+            'pay_timing'     => 'now',
+        ])->assertSessionHasErrors(['card_holder', 'card_number', 'card_expiry', 'card_cvv']);
+    }
+
+    public function test_pay_now_credit_card_charges_with_token_recurrence(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, [
+            'payment_method' => 'CREDIT_CARD',
+            'pay_timing'     => 'now',
+            'card_holder'    => 'Cliente Teste',
+            'card_number'    => '5162306219378829',
+            'card_expiry'    => '05/30',
+            'card_cvv'       => '318',
+            'postal_code'     => '01310-100',
+            'address_number' => '100',
+        ])->assertRedirect(route('thank-you'));
+
+        $this->assertCount(12, $this->asaas->charges);
+        $this->assertNotEmpty($this->asaas->cardExtras[0]['creditCard'] ?? null);
+        $this->assertSame('tok_fake', $this->asaas->cardExtras[1]['creditCardToken'] ?? null);
+        $this->assertSame(12, Invoice::count());
+    }
 }
 
 class FakeAssasController extends AssasController
 {
     public array $charges = [];
     public array $canceled = [];
+    public array $cardExtras = [];
     public ?int $failAt = null;
 
     public function createdCustomer($name, $cpfcnpj, $mobilePhone = null, $email = null, $birth_date = null)
@@ -278,17 +345,33 @@ class FakeAssasController extends AssasController
         return ['user' => $user, 'id' => $user->token];
     }
 
-    public function createdCharge($customer, $billingType, $installments, $value, $description, $dueDate)
+    public function createdCharge($customer, $billingType, $installments, $value, $description, $dueDate, array $extras = [])
     {
         if ($this->failAt !== null && count($this->charges) + 1 === $this->failAt) {
             return false;
         }
 
         $this->charges[] = number_format((float) $value, 2, '.', '');
+        $this->cardExtras[] = $extras;
 
         $id = 'pay_' . count($this->charges);
 
-        return ['id' => $id, 'invoiceUrl' => 'https://example.test/' . $id, 'splits' => []];
+        return [
+            'id'              => $id,
+            'invoiceUrl'      => 'https://example.test/' . $id,
+            'status'          => !empty($extras['creditCard']) || !empty($extras['creditCardToken']) ? 'CONFIRMED' : 'PENDING',
+            'creditCardToken' => !empty($extras['creditCard']) ? 'tok_fake' : ($extras['creditCardToken'] ?? null),
+            'splits'          => [],
+        ];
+    }
+
+    public function getPixQrCode(string $paymentId)
+    {
+        return [
+            'encodedImage'   => 'aGVsbG8=',
+            'payload'        => '00020126580014br.gov.bcb.pix',
+            'expirationDate' => now()->addDay()->toIso8601String(),
+        ];
     }
 
     public function canceledCharge($token)
