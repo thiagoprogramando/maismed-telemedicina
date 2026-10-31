@@ -303,9 +303,10 @@ class AssasController extends Controller {
     
             $response = $client->post(AssasConfig::url() . 'v3/payments', $options);
             $body     = (string) $response->getBody();
+            $status   = $response->getStatusCode();
+            $data     = json_decode($body, true);
     
-            if ($response->getStatusCode() === 200) {
-                $data = json_decode($body, true);
+            if (in_array($status, [200, 201], true) && !empty($data['id'])) {
                 return [
                     'id'              => $data['id'],
                     'invoiceUrl'      => $data['invoiceUrl'] ?? null,
@@ -316,10 +317,26 @@ class AssasController extends Controller {
             }
 
             Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $body);
-            return false;
+
+            return [
+                'error'   => true,
+                'message' => $this->formatAssasErrors($data) ?? 'Cobrança recusada pelo gateway de pagamento.',
+            ];
+        } catch (RequestException $e) {
+            $message = $this->assasErrorMessage($e);
+            Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $message);
+
+            return [
+                'error'   => true,
+                'message' => $message,
+            ];
         } catch (\Exception $e) {
             Log::error('Erro ao Gerar Fatura (Controller AssasController) de '.$customer.': ' . $e->getMessage());
-            return false;
+
+            return [
+                'error'   => true,
+                'message' => 'Não foi possível gerar a cobrança. Tente novamente em instantes.',
+            ];
         }
     }
 

@@ -253,6 +253,33 @@ class SalePaymentTest extends TestCase
         $this->assertSame('sub_1', $sale->subscription_token);
     }
 
+    public function test_pay_show_pix_still_works_when_subscription_fails(): void
+    {
+        $this->asaas->failSubscription = true;
+
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, [
+            'payment_method' => 'PIX',
+            'pay_timing'     => 'now',
+        ]);
+
+        $sale = Sale::first();
+        $response = $this->get(route('pay', $sale->uuid));
+
+        $response->assertOk();
+        $response->assertSee('00020126580014br.gov.bcb.pix', false);
+        $response->assertDontSee('Não foi possível iniciar o pagamento', false);
+
+        $this->assertCount(1, $this->asaas->charges);
+        $this->assertCount(0, $this->asaas->canceled);
+        $this->assertSame(1, Invoice::count());
+
+        $sale->refresh();
+        $this->assertNull($sale->subscription_token);
+    }
+
     public function test_webhook_activates_buyer_not_seller(): void
     {
         $seller = $this->seller();

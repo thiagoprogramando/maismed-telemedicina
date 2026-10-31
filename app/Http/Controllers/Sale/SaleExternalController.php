@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -269,11 +270,16 @@ class SaleExternalController extends Controller {
                     $pix = app(AssasController::class)->getPixQrCode($first['id']) ?: null;
                     if (!$pix) {
                         $error = 'Não foi possível gerar o QR Code PIX. Tente novamente em instantes.';
+                        if (!empty($invoiceUrl)) {
+                            $error .= ' Use o link da fatura enquanto isso.';
+                        }
                     }
                 }
             } catch (\RuntimeException $e) {
                 Log::error('Falha ao preparar pagamento imediato', ['sale' => $sale->uuid, 'error' => $e->getMessage()]);
-                $error = 'Não foi possível iniciar o pagamento. Tente novamente em breve.';
+                $error = $e->getMessage() !== ''
+                    ? $e->getMessage()
+                    : 'Não foi possível iniciar o pagamento. Tente novamente em breve.';
             }
         }
 
@@ -366,8 +372,11 @@ class SaleExternalController extends Controller {
                 $cardExtras
             );
 
-            if ($charge === false || empty($charge['id'])) {
-                return redirect()->back()->withInput()->with('error', 'Cartão recusado. Verifique os dados e tente novamente.');
+            if ($charge === false || !empty($charge['error']) || empty($charge['id'])) {
+                $detail = is_array($charge) && !empty($charge['message'])
+                    ? $charge['message']
+                    : 'Cartão recusado. Verifique os dados e tente novamente.';
+                return redirect()->back()->withInput()->with('error', $detail);
             }
 
             $chargeId = $charge['id'];
@@ -430,10 +439,15 @@ class SaleExternalController extends Controller {
             ];
         }
 
+        if (empty($sale->user?->token)) {
+            throw new \RuntimeException('Cliente sem vínculo no gateway de pagamento. Refaça a adesão ou fale com o suporte.');
+        }
+
         $assasController = app(AssasController::class);
         $seller          = $sale->seller_id ? User::find($sale->seller_id) : null;
         $dueDay          = (int) (($sale->payment_features['due_date'] ?? null) ?: now()->day);
         $chargeId        = null;
+        $invoiceSaved    = false;
 
         try {
             $charge = $assasController->createdCharge(
@@ -446,8 +460,11 @@ class SaleExternalController extends Controller {
                 []
             );
 
-            if ($charge === false || empty($charge['id'])) {
-                throw new \RuntimeException('Cobrança da 1ª parcela recusada pelo Asaas.');
+            if ($charge === false || !empty($charge['error']) || empty($charge['id'])) {
+                $detail = is_array($charge) && !empty($charge['message'])
+                    ? $charge['message']
+                    : 'Cobrança da 1ª parcela recusada pelo Asaas.';
+                throw new \RuntimeException($detail);
             }
 
             $chargeId = $charge['id'];
@@ -465,18 +482,20 @@ class SaleExternalController extends Controller {
                 );
                 $this->createCommission($seller, $sale, $sale->plan, now(), $charge);
             });
-
-            // PIX/boleto: 1ª avulsa + assinatura dos 11 ciclos restantes (se a API aceitar billingType).
-            $this->startSubscription($assasController, $sale, $billingType, []);
-
-            return $charge;
+            $invoiceSaved = true;
         } catch (\Throwable $e) {
-            if ($chargeId) {
+            // Só cancela no Asaas se a fatura local ainda não foi gravada.
+            if ($chargeId && !$invoiceSaved) {
                 $assasController->canceledCharge($chargeId);
             }
 
             throw $e instanceof \RuntimeException ? $e : new \RuntimeException($e->getMessage(), 0, $e);
         }
+
+        // Assinatura é complementar: falha aqui NÃO pode impedir o PIX da 1ª parcela.
+        $this->startSubscription($assasController, $sale, $billingType, []);
+
+        return $charge;
     }
 
     /**
@@ -486,6 +505,13 @@ class SaleExternalController extends Controller {
     private function startSubscription(AssasController $assasController, Sale $sale, string $billingType, array $extras = []): void
     {
         if (!empty($sale->subscription_token) || !$sale->user?->token) {
+            return;
+        }
+
+        if (!Schema::hasColumn('sales', 'subscription_token')) {
+            Log::warning('Coluna subscription_token ausente — rode as migrations antes de criar assinaturas.', [
+                'sale' => $sale->uuid,
+            ]);
             return;
         }
 
@@ -506,22 +532,21 @@ class SaleExternalController extends Controller {
                 'Plano: ' . ($sale->plan->name ?? $sale->name),
                 $subscriptionExtras
             );
+
+            if ($subscription === false || empty($subscription['id'])) {
+                Log::error('Assinatura Asaas não criada após 1ª parcela', ['sale' => $sale->uuid]);
+                return;
+            }
+
+            $sale->subscription_token = $subscription['id'];
+            $sale->contract_months    = self::INSTALLMENTS;
+            $sale->save();
         } catch (\Throwable $e) {
             Log::error('Falha ao criar assinatura Asaas após 1ª parcela', [
                 'sale'  => $sale->uuid,
                 'error' => $e->getMessage(),
             ]);
-            return;
         }
-
-        if ($subscription === false || empty($subscription['id'])) {
-            Log::error('Assinatura Asaas não criada após 1ª parcela', ['sale' => $sale->uuid]);
-            return;
-        }
-
-        $sale->subscription_token = $subscription['id'];
-        $sale->contract_months    = self::INSTALLMENTS;
-        $sale->save();
     }
 
     private function checkoutFlash(Sale $sale, bool $payNow, array $extra = []): array
@@ -687,8 +712,11 @@ class SaleExternalController extends Controller {
                         throw new \RuntimeException("Erro ao gerar cobrança da parcela {$i}: " . $e->getMessage());
                     }
 
-                    if ($charge === false || empty($charge['id'])) {
-                        throw new \RuntimeException("Cobrança da parcela {$i} recusada pelo Asaas.");
+                    if ($charge === false || !empty($charge['error']) || empty($charge['id'])) {
+                        $detail = is_array($charge) && !empty($charge['message'])
+                            ? $charge['message']
+                            : "Cobrança da parcela {$i} recusada pelo Asaas.";
+                        throw new \RuntimeException($detail);
                     }
 
                     if (!empty($charge['creditCardToken'])) {
