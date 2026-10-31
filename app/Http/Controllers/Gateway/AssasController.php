@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Gateway;
 
 use App\Http\Controllers\Controller;
+use App\Mail\SaleAgreementMail;
 use App\Models\Extract;
 use App\Models\User;
 use App\Models\Invoice;
 use App\Models\Sale;
 use App\Support\AssasConfig;
+use App\Support\MailConfig;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 use Carbon\Carbon;
@@ -533,10 +536,16 @@ class AssasController extends Controller {
 
     public function webhook(Request $request) {
 
-        $jsonData   = $request->json()->all();
-        $token      = $jsonData['payment']['id'];
+        $jsonData = $request->json()->all() ?: $request->all();
+        $event    = $jsonData['event'] ?? null;
+        $token    = $jsonData['payment']['id'] ?? null;
 
-        if ($jsonData['event'] === 'PAYMENT_CONFIRMED' || $jsonData['event'] === 'PAYMENT_RECEIVED') {
+        if (!$event || !$token) {
+            Log::warning('Webhook Asaas sem event/payment.id', ['payload' => $jsonData]);
+            return response()->json(['message' => 'Payload inválido'], 200);
+        }
+
+        if ($event === 'PAYMENT_CONFIRMED' || $event === 'PAYMENT_RECEIVED') {
             
             $invoice = Invoice::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
             if ($invoice) {
@@ -544,14 +553,24 @@ class AssasController extends Controller {
                 $invoice->status = 'paid';
                 if ($invoice->save()) {
                     
-                    // Ativa o comprador (titular da venda), não o consultor em invoice.user_id.
-                    $sale = Sale::find($invoice->sale_id);
-                    if ($sale && $sale->user) {
-                        $sale->user->status = 'active';
-                        $sale->user->save();
+                    // Ativa a venda + comprador (titular), não o consultor em invoice.user_id.
+                    $sale = Sale::with(['user', 'plan'])->find($invoice->sale_id);
+                    if ($sale) {
+                        if ($sale->status !== 'active') {
+                            $sale->status = 'active';
+                            $sale->save();
+                        }
+
+                        if ($sale->user) {
+                            $sale->user->status = 'active';
+                            $sale->user->save();
+                            User::where('parent_id', $sale->user_id)->update(['status' => 'active']);
+                        }
+
+                        $this->sendPaymentConfirmedEmail($sale, $invoice);
                     }
 
-                    $extract = Extract::where('payment_token', $token) ->first();
+                    $extract = Extract::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
                     if ($extract) { 
                         $extract->status = 'paid'; 
                         $extract->payment_date = now(); 
@@ -569,10 +588,15 @@ class AssasController extends Controller {
                 }
             }
 
+            // Idempotente: fatura já paga (webhook repetido).
+            if (Invoice::where('payment_token', $token)->where('status', 'paid')->exists()) {
+                return response()->json(['message' => 'Fatura já estava paga'], 200);
+            }
+
             return response()->json(['message' => 'Nenhuma Fatura para o TOKEN!'], 200);
         };
 
-        if ($jsonData['event'] === 'PAYMENT_OVERDUE') {
+        if ($event === 'PAYMENT_OVERDUE') {
 
             $invoice = Invoice::where('payment_token', $token)->whereIn('status', ['pendent', 'canceled'])->first();
             if ($invoice) {
@@ -596,7 +620,7 @@ class AssasController extends Controller {
             return response()->json(['message' => 'Nenhuma Fatura para o TOKEN!'], 200);
         };
 
-        if ($jsonData['event'] === 'PAYMENT_DELETED') {
+        if ($event === 'PAYMENT_DELETED') {
             
             $invoice = Invoice::where('payment_token', $token)->first();
             if ($invoice && $invoice->delete()) {
@@ -614,7 +638,7 @@ class AssasController extends Controller {
             return response()->json(['message' => 'Nenhuma Fatura para o TOKEN!'], 200);
         };
 
-        if ($jsonData['event'] === 'PAYMENT_RESTORED') {
+        if ($event === 'PAYMENT_RESTORED') {
 
             $invoice = Invoice::withTrashed()->where('payment_token', $token)->first();
             if ($invoice) {
@@ -638,5 +662,53 @@ class AssasController extends Controller {
         };
         
         return response()->json(['message' => 'Nenhum Evento disponível!'], 200);
+    }
+
+    private function sendPaymentConfirmedEmail(Sale $sale, Invoice $invoice): void
+    {
+        $buyer = $sale->user;
+        if (!$buyer || empty($buyer->email)) {
+            return;
+        }
+
+        try {
+            MailConfig::apply();
+            if (!MailConfig::isConfigured()) {
+                Log::warning('Webhook: pagamento confirmado sem SMTP configurado', ['sale' => $sale->uuid]);
+                return;
+            }
+
+            $labels = [
+                'CREDIT_CARD' => 'Cartão de Crédito',
+                'PIX'         => 'PIX',
+                'BOLETO'      => 'Boleto Bancário',
+            ];
+
+            $mailer = Mail::to($buyer->email);
+            $bcc = MailConfig::bcc();
+            if (!empty($bcc)) {
+                $mailer->bcc($bcc);
+            }
+
+            $mailer->send(new SaleAgreementMail([
+                'subject'              => 'Pagamento confirmado — ' . ($sale->plan->name ?? $sale->name) . ' - ' . config('app.name'),
+                'fromEmail'            => MailConfig::fromAddress() ?: config('mail.from.address'),
+                'fromName'             => MailConfig::fromName() ?: config('mail.from.name', config('app.name')),
+                'bcc'                  => $bcc,
+                'customer_name'        => $buyer->name,
+                'plan_name'            => $sale->plan->name ?? $sale->name,
+                'price'                => (float) $sale->price,
+                'payment_method_label' => $labels[$sale->payment_method] ?? $sale->payment_method,
+                'agreement_date'       => now()->format('d/m/Y H:i'),
+                'payment_url'          => $invoice->payment_url,
+                'dependents_summary'   => 'Seu pagamento da 1ª parcela foi confirmado e o plano já está ativo.',
+            ]));
+        } catch (\Throwable $e) {
+            Log::error('Webhook: falha ao enviar e-mail de confirmação', [
+                'sale'  => $sale->uuid,
+                'email' => $buyer->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

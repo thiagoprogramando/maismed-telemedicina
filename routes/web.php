@@ -24,6 +24,8 @@ Route::get('/create-sale/{plan}/{parent?}', [SaleExternalController::class, 'ind
 Route::get('/thank-you', [SaleExternalController::class, 'thankYou'])->name('thank-you');
 Route::post('created-sale', [SaleExternalController::class, 'store'])->name('created-sale');
 Route::get('/pay/{uuid}', [SaleExternalController::class, 'payShow'])->name('pay');
+Route::get('/pay/{uuid}/status', [SaleExternalController::class, 'payStatus'])->name('pay-status');
+Route::get('/pay/{uuid}/confirmed', [SaleExternalController::class, 'payConfirmed'])->name('pay-confirmed');
 Route::post('/pay/{uuid}/card', [SaleExternalController::class, 'payCard'])->name('pay-card');
 
 Route::middleware(['auth'])->group(function () {

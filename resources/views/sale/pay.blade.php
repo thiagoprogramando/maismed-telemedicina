@@ -72,6 +72,10 @@
                                     <a href="{{ $invoiceUrl }}" target="_blank" rel="noopener" class="small">Abrir fatura no Asaas</a>
                                 </div>
                             @endif
+
+                            <p class="text-center text-muted small mt-3 mb-0" id="pix-wait-hint">
+                                Após pagar, esta tela confirma automaticamente em alguns segundos…
+                            </p>
                         @elseif ($method === 'CREDIT_CARD')
                             <div class="mb-3">
                                 <h2 class="h5 text-primary">
@@ -179,6 +183,28 @@
             $('#card_cvv').on('input', function () {
                 this.value = this.value.replace(/\D/g, '').slice(0, 4);
             });
+
+            @if ($method === 'PIX' && empty($error))
+            (function pollPixPayment() {
+                var statusUrl = @json(route('pay-status', $sale->uuid));
+                var tries = 0;
+                var timer = setInterval(function () {
+                    tries++;
+                    fetch(statusUrl, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (data && data.paid && data.redirect) {
+                                clearInterval(timer);
+                                window.location.href = data.redirect;
+                            }
+                        })
+                        .catch(function () {});
+                    if (tries > 120) {
+                        clearInterval(timer);
+                    }
+                }, 3000);
+            })();
+            @endif
         </script>
     </body>
 </html>

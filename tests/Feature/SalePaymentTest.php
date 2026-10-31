@@ -280,6 +280,23 @@ class SalePaymentTest extends TestCase
         $this->assertNull($sale->subscription_token);
     }
 
+    public function test_checkout_rejects_price_below_asaas_minimum(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 1.00, 'status' => 'active']);
+
+        $response = $this->checkout($plan, $seller, [
+            'payment_method' => 'PIX',
+            'pay_timing'     => 'now',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $this->assertStringContainsString('R$ 5,00', session('error'));
+        $this->assertSame(0, Sale::count());
+        $this->assertCount(0, $this->asaas->charges);
+    }
+
     public function test_webhook_activates_buyer_not_seller(): void
     {
         $seller = $this->seller();
@@ -351,10 +368,44 @@ class SalePaymentTest extends TestCase
         $buyer->refresh();
         $seller->refresh();
         $invoice->refresh();
+        $sale->refresh();
 
         $this->assertSame('active', $buyer->status);
+        $this->assertSame('active', $sale->status);
         $this->assertSame('active', $seller->status);
         $this->assertSame('paid', $invoice->status);
         $this->assertEquals(7.0, (float) $seller->wallet);
+    }
+
+    public function test_pay_status_reports_paid_after_webhook(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $seller, [
+            'payment_method' => 'PIX',
+            'pay_timing'     => 'now',
+        ]);
+        $sale = Sale::first();
+        $this->get(route('pay', $sale->uuid))->assertOk();
+
+        $invoice = Invoice::where('sale_id', $sale->id)->first();
+        $this->assertNotNull($invoice);
+
+        $this->postJson('/api/webhook', [
+            'event'   => 'PAYMENT_RECEIVED',
+            'payment' => ['id' => $invoice->payment_token],
+        ])->assertOk();
+
+        $this->getJson(route('pay-status', $sale->uuid))
+            ->assertOk()
+            ->assertJson(['paid' => true]);
+
+        $this->get(route('pay-confirmed', $sale->uuid))
+            ->assertRedirect(route('thank-you'));
+
+        $sale->refresh();
+        $this->assertSame('active', $sale->status);
+        $this->assertSame('active', $sale->user->status);
     }
 }

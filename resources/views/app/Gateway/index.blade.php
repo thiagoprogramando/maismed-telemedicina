@@ -81,6 +81,20 @@
                                 <small class="form-text text-muted">Já existe um token no banco. Preencha só se quiser trocar.</small>
                             @endif
                         </div>
+
+                        <div class="form-group mb-0">
+                            <label>URL do Webhook (cadastre no Asaas)</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="asaas_webhook_url" readonly
+                                    value="{{ url('/api/webhook') }}">
+                                <button type="button" class="btn btn-outline-primary" id="copy-webhook-url">Copiar</button>
+                            </div>
+                            <small class="form-text text-muted">
+                                No painel Asaas → Integrações → Webhook, use esta URL e marque
+                                <code>PAYMENT_RECEIVED</code> / <code>PAYMENT_CONFIRMED</code>.
+                                Sem isso, PIX pago não ativa o cliente nem libera a tela de sucesso.
+                            </small>
+                        </div>
                     </div>
                 </div>
 
@@ -238,5 +252,17 @@
             </div>
         </div>
     </form>
+
+    <script>
+        document.getElementById('copy-webhook-url')?.addEventListener('click', function () {
+            var input = document.getElementById('asaas_webhook_url');
+            if (!input) return;
+            navigator.clipboard.writeText(input.value).then(function () {
+                if (window.Swal) {
+                    Swal.fire({ title: 'Copiado!', text: 'URL do webhook copiada.', icon: 'success', timer: 1600 });
+                }
+            });
+        });
+    </script>
 
 @endsection

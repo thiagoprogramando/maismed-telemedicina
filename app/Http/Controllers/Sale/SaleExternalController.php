@@ -132,6 +132,11 @@ class SaleExternalController extends Controller {
         // O valor cobrado é sempre recalculado aqui; o total exibido no navegador não é confiável.
         $quote = $plan->quote($quantity, $dependents);
 
+        // Asaas exige mínimo de R$ 5,00 por cobrança (sandbox e produção).
+        if ((float) $quote['price'] < 5) {
+            return redirect()->back()->withInput()->with('error', 'O valor do plano precisa ser de pelo menos R$ 5,00 para gerar cobrança no Asaas.');
+        }
+
         if (!AssasConfig::isConfigured()) {
             Log::error('Checkout bloqueado: Asaas sem URL/token (.env ou admin/gateway).');
             return redirect()->back()->withInput()->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
@@ -248,7 +253,15 @@ class SaleExternalController extends Controller {
     public function payShow(string $uuid)
     {
         $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
-        if (!$sale || $sale->status !== 'pendent' || !$sale->user || !$sale->plan) {
+        if (!$sale || !$sale->user || !$sale->plan) {
+            return redirect()->route('showcase')->with('info', 'Pagamento indisponível. Verifique o link ou fale com seu consultor.');
+        }
+
+        if ($sale->status === 'active' || Invoice::where('sale_id', $sale->id)->where('status', 'paid')->exists()) {
+            return redirect()->route('pay-confirmed', $sale->uuid);
+        }
+
+        if ($sale->status !== 'pendent') {
             return redirect()->route('showcase')->with('info', 'Pagamento indisponível. Verifique o link ou fale com seu consultor.');
         }
 
@@ -290,6 +303,45 @@ class SaleExternalController extends Controller {
             'pix'         => $pix,
             'invoiceUrl'  => $invoiceUrl,
             'error'       => $error,
+        ]);
+    }
+
+    public function payStatus(string $uuid)
+    {
+        $sale = Sale::where('uuid', $uuid)->first();
+        if (!$sale) {
+            return response()->json(['paid' => false], 404);
+        }
+
+        $paid = $sale->status === 'active'
+            || Invoice::where('sale_id', $sale->id)->where('status', 'paid')->exists();
+
+        return response()->json([
+            'paid'     => $paid,
+            'redirect' => $paid ? route('pay-confirmed', $sale->uuid) : null,
+        ]);
+    }
+
+    public function payConfirmed(string $uuid)
+    {
+        $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
+        if (!$sale || !$sale->user || !$sale->plan) {
+            return redirect()->route('showcase')->with('info', 'Pagamento indisponível.');
+        }
+
+        $paid = $sale->status === 'active'
+            || Invoice::where('sale_id', $sale->id)->where('status', 'paid')->exists();
+
+        if (!$paid) {
+            return redirect()->route('pay', $sale->uuid);
+        }
+
+        return redirect()->route('thank-you')->with([
+            'success'  => 'Pagamento confirmado! Seu plano já está ativo.',
+            'checkout' => $this->checkoutFlash($sale, true, [
+                'card_status' => 'CONFIRMED',
+                'invoice_url' => Invoice::where('sale_id', $sale->id)->value('payment_url'),
+            ]),
         ]);
     }
 
@@ -441,6 +493,11 @@ class SaleExternalController extends Controller {
 
         if (empty($sale->user?->token)) {
             throw new \RuntimeException('Cliente sem vínculo no gateway de pagamento. Refaça a adesão ou fale com o suporte.');
+        }
+
+        // Asaas exige valor mínimo de R$ 5,00 por cobrança.
+        if ((float) $sale->price < 5) {
+            throw new \RuntimeException('O valor da 1ª parcela precisa ser de pelo menos R$ 5,00 (regra do Asaas). Ajuste o preço do plano e tente novamente.');
         }
 
         $assasController = app(AssasController::class);
