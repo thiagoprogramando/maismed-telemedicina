@@ -47,86 +47,210 @@ class AssasController extends Controller {
                 ];
             }
 
-            $existingUser = User::where('document', $cpfcnpj)->first();
+            $cpfcnpj     = preg_replace('/\D/', '', (string) $cpfcnpj);
+            $mobilePhone = $mobilePhone !== null ? preg_replace('/\D/', '', (string) $mobilePhone) : null;
+            $email       = $email !== null ? trim((string) $email) : null;
+
+            if ($cpfcnpj === '' || (strlen($cpfcnpj) !== 11 && strlen($cpfcnpj) !== 14)) {
+                return [
+                    'error'   => true,
+                    'message' => 'Informe um CPF ou CNPJ válido.',
+                ];
+            }
+
+            $existingUser = User::withTrashed()->where('document', $cpfcnpj)->first();
+            if ($existingUser && $existingUser->trashed()) {
+                $existingUser->restore();
+            }
+
             if ($existingUser && !empty($existingUser->token)) {
-                Log::warning("Tentativa de recriar cliente já existente", [
+                Log::info('Reutilizando cliente Asaas já vinculado ao usuário', [
                     'document' => $cpfcnpj,
-                    'email'    => $email,
+                    'user_id'  => $existingUser->id,
                 ]);
+
                 return [
                     'user' => $existingUser,
                     'id'   => $existingUser->token,
                 ];
             }
-    
-            $client     = new Client();
-            $options    = [
+
+            // Evita e-mail único colidindo com outro CPF (comum em re-tentativas de checkout).
+            if ($email) {
+                $emailOwnerQuery = User::withTrashed()->where('email', $email);
+                if ($existingUser) {
+                    $emailOwnerQuery->where('id', '!=', $existingUser->id);
+                }
+
+                if ($emailOwnerQuery->exists()) {
+                    return [
+                        'error'   => true,
+                        'message' => 'Este e-mail já está cadastrado em outra conta. Use outro e-mail ou fale com o suporte.',
+                    ];
+                }
+            }
+
+            $asaasId = $this->findCustomerIdByDocument($cpfcnpj);
+
+            if (!$asaasId) {
+                $created = $this->postCustomerToAssas($name, $cpfcnpj, $mobilePhone, $email);
+                if (!empty($created['error'])) {
+                    // Timeout / resposta ambígua: tenta localizar antes de falhar.
+                    $asaasId = $this->findCustomerIdByDocument($cpfcnpj);
+                    if (!$asaasId) {
+                        return $created;
+                    }
+                } else {
+                    $asaasId = $created['id'];
+                }
+            }
+
+            $user = $existingUser ?? new User();
+            if (!$existingUser) {
+                $user->uuid     = Str::uuid();
+                $user->document = $cpfcnpj;
+                $user->password = bcrypt(substr($cpfcnpj, 0, 4));
+            }
+
+            $user->name       = $name;
+            $user->phone      = $mobilePhone;
+            $user->email      = $email;
+            $user->birth_date = $birth_date ?: $user->birth_date;
+            $user->token      = $asaasId;
+            $user->roles      = $user->roles ?: 'user';
+            $user->status     = $user->status ?: 'inactive';
+
+            try {
+                $user->save();
+            } catch (\Throwable $e) {
+                Log::error('Falha ao salvar usuário local após vincular cliente no Asaas', [
+                    'token'    => $asaasId,
+                    'document' => $cpfcnpj,
+                    'error'    => $e->getMessage(),
+                ]);
+
+                return [
+                    'error'   => true,
+                    'message' => 'Não foi possível concluir o cadastro local. Se o e-mail ou CPF já existir, use os mesmos dados da conta ou fale com o suporte.',
+                ];
+            }
+
+            return [
+                'user' => $user,
+                'id'   => $asaasId,
+            ];
+        } catch (RequestException $e) {
+            $details = $this->assasErrorMessage($e);
+            Log::error('Erro de requisição na API Assas CreateCustomer: ' . $details);
+
+            return [
+                'error'   => true,
+                'message' => 'Não foi possível cadastrar no pagamento: ' . $details,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Erro geral na função createCustomer: ' . $e->getMessage());
+
+            return [
+                'error'   => true,
+                'message' => 'Falha no cadastro. Verifique os dados e tente novamente.',
+            ];
+        }
+    }
+
+    private function findCustomerIdByDocument(string $cpfcnpj): ?string
+    {
+        try {
+            $client   = new Client(['timeout' => 30, 'connect_timeout' => 15]);
+            $response = $client->get(AssasConfig::url() . 'v3/customers', [
                 'headers' => $this->headers(),
-                'json' => [
+                'query'   => [
+                    'cpfCnpj' => $cpfcnpj,
+                    'limit'   => 1,
+                ],
+                'verify'  => !app()->environment('local'),
+            ]);
+
+            $data = json_decode((string) $response->getBody(), true);
+            $id   = $data['data'][0]['id'] ?? null;
+
+            return is_string($id) && $id !== '' ? $id : null;
+        } catch (\Throwable $e) {
+            Log::warning('Falha ao buscar cliente Asaas por CPF/CNPJ', [
+                'document' => $cpfcnpj,
+                'error'    => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    private function postCustomerToAssas(string $name, string $cpfcnpj, ?string $mobilePhone, ?string $email): array
+    {
+        try {
+            $client   = new Client(['timeout' => 30, 'connect_timeout' => 15]);
+            $response = $client->post(AssasConfig::url() . 'v3/customers', [
+                'headers' => $this->headers(),
+                'json'    => [
                     'name'                 => $name,
                     'cpfCnpj'              => $cpfcnpj,
                     'mobilePhone'          => $mobilePhone,
                     'email'                => $email,
                     'notificationDisabled' => true,
                 ],
-                'verify' => !app()->environment('local'),
-            ];
-    
-            $response = $client->post(AssasConfig::url() . 'v3/customers', $options);
-            $body     = (string) $response->getBody();
-            $data     = json_decode($body, true);
-    
-            if ($response->getStatusCode() === 200 && isset($data['id'])) {
+                'verify'  => !app()->environment('local'),
+            ]);
 
-                if ($existingUser) {
-                    $user = $existingUser;
-                } else {
-                    $user             = new User();
-                    $user->uuid       = Str::uuid();
-                    $user->name       = $name;
-                    $user->document   = $cpfcnpj;
-                    $user->phone      = $mobilePhone;
-                    $user->email      = $email;
-                    $user->password   = bcrypt(substr(preg_replace('/\D/', '', $cpfcnpj), 0, 4));
-                    $user->birth_date = $birth_date;
-                }
-                
-                $user->token = $data['id'];
-                if ($user->save()) {
-                    return [
-                        'user' => $user,
-                        'id'   => $data['id'],
-                    ];
-                } else {
-                    Log::error("Falha ao salvar usuário local após criar cliente no Asaas", [
-                        'token'    => $data['id'],
-                        'document' => $cpfcnpj,
-                    ]);
-                    return [
-                        'error'   => true,
-                        'message' => 'Falha no cadastro, verifique seus dados e tente novamente!',
-                    ];
-                }
+            $data   = json_decode((string) $response->getBody(), true);
+            $status = $response->getStatusCode();
+
+            if (in_array($status, [200, 201], true) && !empty($data['id'])) {
+                return ['id' => $data['id']];
             }
-    
-            Log::error("Erro na criação do cliente: " . json_encode($data));
+
+            Log::error('Erro na criação do cliente Asaas: ' . json_encode($data));
+
             return [
                 'error'   => true,
-                'message' => 'Falha no cadastro, verifique seus dados e tente novamente!',
+                'message' => $this->formatAssasErrors($data) ?? 'Falha no cadastro no gateway de pagamento.',
             ];
         } catch (RequestException $e) {
-            Log::error("Erro de requisição na API Assas CreateCustomer: " . $e->getMessage());
             return [
                 'error'   => true,
-                'message' => 'Falha no cadastro, verifique seus dados e tente novamente! Problema: '.$e->getMessage(),
-            ];
-        } catch (\Exception $e) {
-            Log::error("Erro geral na função createCustomer: " . $e->getMessage());
-            return [
-                'error'   => true,
-                'message' => 'Falha no cadastro, verifique seus dados e tente novamente! Problema: '.$e->getMessage(),
+                'message' => $this->assasErrorMessage($e),
             ];
         }
+    }
+
+    private function assasErrorMessage(RequestException $e): string
+    {
+        $response = $e->getResponse();
+        if ($response) {
+            $data = json_decode((string) $response->getBody(), true);
+            $msg  = $this->formatAssasErrors($data);
+            if ($msg) {
+                return $msg;
+            }
+        }
+
+        return 'Não foi possível falar com o gateway de pagamento. Tente novamente.';
+    }
+
+    private function formatAssasErrors(?array $data): ?string
+    {
+        if (empty($data['errors']) || !is_array($data['errors'])) {
+            return null;
+        }
+
+        $parts = [];
+        foreach ($data['errors'] as $error) {
+            if (!empty($error['description'])) {
+                $parts[] = $error['description'];
+            } elseif (!empty($error['code'])) {
+                $parts[] = $error['code'];
+            }
+        }
+
+        return $parts !== [] ? implode(' ', $parts) : null;
     }
     
     public function createdCharge ($customer, $billingType, $installments, $value, $description, $dueDate, array $extras = []) {

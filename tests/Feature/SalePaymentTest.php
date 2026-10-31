@@ -311,6 +311,7 @@ class SalePaymentTest extends TestCase
         $extract->value         = 7;
         $extract->payment_date  = now();
         $extract->payment_token = 'pay_webhook_1';
+        $extract->payment_url   = 'https://example.test/pay_webhook_1';
         $extract->type          = 'commission';
         $extract->status        = 'pendent';
         $extract->save();

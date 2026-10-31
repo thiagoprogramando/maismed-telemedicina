@@ -15,6 +15,7 @@
         <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
         <link href="{{ asset('Assets/css/sb-admin-2.css') }}" rel="stylesheet">
+        <link href="{{ asset('Assets/css/panel.css') }}?v={{ @filemtime(public_path('Assets/css/panel.css')) }}" rel="stylesheet">
     </head>
 
     <body id="page-top">
@@ -22,31 +23,31 @@
         <div id="wrapper">
             <ul class="navbar-nav bg-gradient-primary sidebar sidebar-dark accordion" id="accordionSidebar">
                 <a class="sidebar-brand d-flex align-items-center justify-content-center" href="{{ route('app') }}">
-                    <div class="sidebar-brand-icon rotate-n-15">
-                        <i class="fas fa-user-md"></i>
+                    <div class="sidebar-brand-icon">
+                        <i data-lucide="stethoscope"></i>
                     </div>
                     <div class="sidebar-brand-text mx-3">{{ env('APP_NAME') }}</div>
                 </a>
                 <hr class="sidebar-divider my-0">
 
                 <li class="nav-item {{ request()->routeIs('app') ? 'active' : '' }}">
-                    <a class="nav-link" href="{{ route('app') }}"> <i class="fas fa-fw fa-tachometer-alt"></i> <span>Dashboard</span></a>
+                    <a class="nav-link" href="{{ route('app') }}"> <i data-lucide="layout-dashboard"></i> <span>Dashboard</span></a>
                 </li>
 
                 @if (Auth::user()->roles == 'collaborator' || Auth::user()->roles == 'admin')
                     <hr class="sidebar-divider">
                     <div class="sidebar-heading">Operação</div>
                     <li class="nav-item {{ request()->routeIs('sales', 'sale') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('sales') }}"> <i class="fas fa-fw fa-users"></i> <span>Beneficiários</span></a>
+                        <a class="nav-link" href="{{ route('sales') }}"> <i data-lucide="users"></i> <span>Beneficiários</span></a>
                     </li>
                     <li class="nav-item {{ request()->routeIs('plans', 'plan') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('plans') }}"> <i class="fas fa-fw fa-clipboard-list"></i> <span>Planos</span></a>
+                        <a class="nav-link" href="{{ route('plans') }}"> <i data-lucide="clipboard-list"></i> <span>Planos</span></a>
                     </li>
 
                     <hr class="sidebar-divider">
                     <div class="sidebar-heading">Finanças</div>
                     <li class="nav-item {{ request()->routeIs('wallet') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('wallet', ['uuid' => Auth::user()->uuid]) }}"> <i class="fas fa-fw fa-wallet"></i> <span>Carteira</span></a>
+                        <a class="nav-link" href="{{ route('wallet', ['uuid' => Auth::user()->uuid]) }}"> <i data-lucide="wallet"></i> <span>Carteira</span></a>
                     </li>
                 @endif
 
@@ -54,10 +55,10 @@
                     <hr class="sidebar-divider">
                     <div class="sidebar-heading">Administração</div>
                     <li class="nav-item {{ request()->routeIs('users', 'user') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('users') }}"> <i class="fas fa-fw fa-user-cog"></i> <span>Pessoas</span></a>
+                        <a class="nav-link" href="{{ route('users') }}"> <i data-lucide="user-cog"></i> <span>Pessoas</span></a>
                     </li>
                     <li class="nav-item {{ request()->routeIs('gateway') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('gateway') }}"> <i class="fas fa-fw fa-credit-card"></i> <span>Gateway</span></a>
+                        <a class="nav-link" href="{{ route('gateway') }}"> <i data-lucide="credit-card"></i> <span>Gateway</span></a>
                     </li>
                 @endif
 
@@ -69,12 +70,12 @@
             <div id="content-wrapper" class="d-flex flex-column">
                 <div id="content">
                     <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                        <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3"> <i class="fa fa-bars"></i> </button>
+                        <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3"> <i data-lucide="menu"></i> </button>
                         <form action="{{ route('sales') }}" class="d-none d-sm-inline-block form-inline mr-auto ml-md-3 my-2 my-md-0 mw-100 navbar-search">
                             <div class="input-group">
                                 <input type="text" name="search" class="form-control bg-light border-0 small" placeholder="Pesquisar..." aria-label="Search" aria-describedby="basic-addon2">
                                 <div class="input-group-append">
-                                    <button class="btn btn-primary" type="submit"> <i class="fas fa-search fa-sm"></i> </button>
+                                    <button class="btn btn-primary" type="submit"> <i data-lucide="search"></i> </button>
                                 </div>
                             </div>
                         </form>
@@ -204,9 +205,9 @@
 
                                 <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
                                     aria-labelledby="userDropdown">
-                                    <a class="dropdown-item" href="{{ route('user', ['uuid' => Auth::user()->uuid]) }}"> <i class="fas fa-user fa-sm fa-fw mr-2 text-gray-400"></i> Perfil </a>
+                                    <a class="dropdown-item" href="{{ route('user', ['uuid' => Auth::user()->uuid]) }}"> <i data-lucide="user"></i> Perfil </a>
                                     <div class="dropdown-divider"></div>
-                                    <a class="dropdown-item" href="{{ route('logout') }}"> <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i> Sair </a>
+                                    <a class="dropdown-item" href="{{ route('logout') }}"> <i data-lucide="log-out"></i> Sair </a>
                                 </div>
                             </li>
                         </ul>
@@ -237,7 +238,7 @@
         </div>
 
         <a class="scroll-to-top rounded" href="#page-top">
-            <i class="fas fa-angle-up"></i>
+            <i data-lucide="chevron-up"></i>
         </a>
 
         <div class="modal fade" id="logoutModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"

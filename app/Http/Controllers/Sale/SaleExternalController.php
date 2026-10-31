@@ -70,6 +70,7 @@ class SaleExternalController extends Controller {
             'parent_id'            => ['nullable', 'string'],
             'name'                 => ['required', 'string', 'max:255'],
             'document'             => ['required', 'string'],
+            'birth_date'           => ['required', 'date', 'before:today'],
             'phone'                => ['required', 'string'],
             'email'                => ['required', 'email'],
             'payment_method'       => ['required', 'in:CREDIT_CARD,PIX,BOLETO'],
@@ -94,6 +95,9 @@ class SaleExternalController extends Controller {
             'name.max'                       => 'O nome não pode ter mais que :max caracteres.',
             'document.required'              => 'Informe seu CPF ou CNPJ.',
             'document.string'                => 'O documento informado é inválido.',
+            'birth_date.required'            => 'Informe sua data de nascimento.',
+            'birth_date.date'                => 'Informe uma data de nascimento válida.',
+            'birth_date.before'              => 'A data de nascimento deve ser anterior a hoje.',
             'phone.required'                 => 'Informe um telefone para contato.',
             'phone.string'                   => 'O telefone informado é inválido.',
             'email.required'                 => 'Informe seu e-mail.',
@@ -132,18 +136,49 @@ class SaleExternalController extends Controller {
             return redirect()->back()->withInput()->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
         }
 
+        $documentDigits = preg_replace('/\D/', '', $validated['document']);
+        $emailOwner = User::withTrashed()
+            ->where('email', $validated['email'])
+            ->where('document', '!=', $documentDigits)
+            ->first();
+        if ($emailOwner) {
+            return redirect()->back()->withInput()->with('error', 'Este e-mail já está cadastrado em outra conta. Use outro e-mail ou fale com o suporte.');
+        }
+
         $assasController = app(AssasController::class);
 
         try {
-            $customer = $assasController->createdCustomer($validated['name'], preg_replace('/\D/', '', $validated['document']), preg_replace('/\D/', '', $validated['phone']), $validated['email'], $request->birth_date);
+            $customer = $assasController->createdCustomer(
+                $validated['name'],
+                $documentDigits,
+                preg_replace('/\D/', '', $validated['phone']),
+                $validated['email'],
+                $validated['birth_date']
+            );
         } catch (\Throwable $e) {
             Log::error('Falha ao criar cliente no Asaas', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid, 'error' => $e->getMessage()]);
-            $customer = false;
+            $customer = [
+                'error'   => true,
+                'message' => 'Não foi possível cadastrar seus dados no pagamento. Tente novamente em instantes.',
+            ];
         }
 
         if (!is_array($customer) || !empty($customer['error']) || empty($customer['user'])) {
-            return redirect()->back()->withInput()->with('error', 'Verifique seus dados e tente novamente!');
+            $message = is_array($customer) && !empty($customer['message'])
+                ? $customer['message']
+                : 'Verifique seus dados e tente novamente!';
+
+            return redirect()->back()->withInput()->with('error', $message);
         }
+
+        // Endereço coletado no checkout (útil no cartão e no cadastro local).
+        $customer['user']->fill([
+            'postal_code'      => preg_replace('/\D/', '', (string) $request->input('postal_code', '')) ?: null,
+            'address'           => $request->input('address'),
+            'address_number'    => $request->input('address_number'),
+            'address_city'      => $request->input('address_city'),
+            'address_provincy'  => $request->input('address_provincy'),
+        ])->save();
 
         $payNow = ($validated['pay_timing'] ?? 'later') === 'now';
 

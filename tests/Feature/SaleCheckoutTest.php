@@ -313,6 +313,36 @@ class SaleCheckoutTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_checkout_rejects_email_already_used_by_another_document(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $other             = new User();
+        $other->uuid       = (string) Str::uuid();
+        $other->name       = 'Outro Cliente';
+        $other->email      = 'cliente@example.com';
+        $other->document   = '52998224725';
+        $other->phone      = '11988887777';
+        $other->password   = bcrypt('secret');
+        $other->birth_date = '1990-01-01';
+        $other->roles      = 'user';
+        $other->status     = 'active';
+        $other->save();
+
+        $response = $this->checkout($plan, $seller, [
+            'payment_method' => 'PIX',
+            'pay_timing'     => 'now',
+            'email'          => 'cliente@example.com',
+            'document'       => '123.456.789-09',
+        ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $this->assertStringContainsString('e-mail', session('error'));
+        $this->assertSame(0, Sale::count());
+    }
+
     public function test_pay_now_credit_card_redirects_to_payment_page_without_card_fields_on_store(): void
     {
         $seller = $this->seller();

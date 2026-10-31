@@ -28,7 +28,9 @@ class GatewayConfigTest extends TestCase
         $this->actingAs($admin)
             ->get('/gateway')
             ->assertOk()
-            ->assertSee('GATEWAY DE PAGAMENTO', false);
+            ->assertSee('Gateway', false)
+            ->assertSee('Asaas', false)
+            ->assertSee('E-mail / SMTP', false);
 
         $this->actingAs($admin)
             ->post('/updated-gateway', [
@@ -218,7 +220,7 @@ class GatewayConfigTest extends TestCase
         $this->assertSame('smtps', config('mail.mailers.smtp.scheme'));
     }
 
-    public function test_checkout_page_uses_absolute_fontawesome_and_collapsed_contract(): void
+    public function test_checkout_page_uses_absolute_lucide_and_collapsed_contract(): void
     {
         $plan = \App\Models\Plan::create([
             'name'   => 'Familiar',
@@ -229,8 +231,8 @@ class GatewayConfigTest extends TestCase
 
         $this->get('/create-sale/' . $plan->slug)
             ->assertOk()
-            ->assertSee('Assets/vendor/fontawesome-free/css/all.min.css', false)
-            ->assertDontSee('create-sale/' . $plan->slug . '/vendor/fontawesome', false)
+            ->assertSee('Assets/vendor/lucide/lucide.min.js', false)
+            ->assertDontSee('create-sale/' . $plan->slug . '/vendor/lucide', false)
             ->assertSee('id="contract-preview"', false)
             ->assertSee('Leia completo', false);
     }

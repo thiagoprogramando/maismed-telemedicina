@@ -10,57 +10,32 @@
         <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
         <link href="{{ asset('Assets/css/sb-admin-2.css') }}" rel="stylesheet">
-        <style>
-            :root {
-                --mm-navy: #0b1b5c;
-            }
-            body.pay-page {
-                background: linear-gradient(160deg, #e8eef8 0%, #f7f9fc 45%, #ffffff 100%);
-                min-height: 100vh;
-                font-family: Nunito, system-ui, sans-serif;
-            }
-            .pay-shell {
-                max-width: 520px;
-            }
-            .pay-brand {
-                background: var(--mm-navy);
-                border-radius: 0.75rem;
-            }
-            .pay-brand img {
-                max-width: 140px;
-            }
-            .pay-card {
-                border: 0;
-                border-radius: 1rem;
-                box-shadow: 0 12px 40px rgba(11, 27, 92, 0.08);
-            }
-            .pay-amount {
-                font-size: 1.75rem;
-                font-weight: 800;
-                color: var(--mm-navy);
-            }
-            .pay-method-icon {
-                width: 1.25rem;
-                height: 1.25rem;
-                vertical-align: -0.2rem;
-            }
-        </style>
+        <link href="{{ asset('Assets/css/checkout.css') }}?v={{ @filemtime(public_path('Assets/css/checkout.css')) }}" rel="stylesheet">
     </head>
     <body class="pay-page">
         <div class="container d-flex align-items-center justify-content-center py-5">
-            <div class="pay-shell w-100">
-                <div class="text-center pay-brand py-3 mb-4">
+            <div class="ck-shell-sm w-100">
+                <div class="ck-brand mb-4">
                     <img src="{{ asset('Assets/img/logo.png') }}" class="img-fluid" alt="Logo Mais Med">
                 </div>
 
-                <div class="card pay-card">
+                <ol class="ck-steps" aria-label="Etapas da adesão">
+                    <li class="ck-step is-done"><span class="ck-step-num">1</span> Dados</li>
+                    @if ($plan->hasSimulator())
+                        <li class="ck-step is-done"><span class="ck-step-num">2</span> Dependentes</li>
+                    @endif
+                    <li class="ck-step is-done"><span class="ck-step-num">{{ $plan->hasSimulator() ? 3 : 2 }}</span> Contrato</li>
+                    <li class="ck-step is-active"><i data-lucide="wallet"></i> Pagamento</li>
+                </ol>
+
+                <div class="card ck-card">
                     <div class="card-body p-4 p-md-5">
                         <div class="text-center mb-4">
-                            <h1 class="h4 text-primary mb-1">Finalize o pagamento</h1>
+                            <h1 class="h4 ck-title mb-1">Finalize o pagamento</h1>
                             <p class="mb-0 text-muted">
                                 Plano <strong>{{ $plan->name }}</strong>
                             </p>
-                            <p class="pay-amount mb-0 mt-2">R$ {{ number_format((float) $sale->price, 2, ',', '.') }}</p>
+                            <p class="ck-amount mb-0 mt-2">R$ {{ number_format((float) $sale->price, 2, ',', '.') }}</p>
                             <small class="text-muted">1ª parcela</small>
                         </div>
 
@@ -86,7 +61,9 @@
                             @if (!empty($pix['payload']))
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control" id="pix-payload" value="{{ $pix['payload'] }}" readonly>
-                                    <button type="button" class="btn btn-primary" id="copy-pix">Copiar</button>
+                                    <button type="button" class="btn btn-primary ck-btn-primary" id="copy-pix">
+                                        <i data-lucide="copy" class="pay-method-icon"></i> Copiar
+                                    </button>
                                 </div>
                             @endif
 
@@ -138,7 +115,9 @@
                                         <input type="text" name="address_number" id="address_number" class="form-control" value="{{ old('address_number') }}" maxlength="20" placeholder="S/N">
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-primary btn-user btn-block w-100">Pagar 1ª parcela</button>
+                                <button type="submit" class="btn btn-primary btn-user btn-block w-100 ck-btn-primary">
+                                    <i data-lucide="lock" class="pay-method-icon"></i> Pagar 1ª parcela
+                                </button>
                             </form>
                         @else
                             <div class="text-center">
@@ -147,7 +126,7 @@
                                     Boleto bancário
                                 </h2>
                                 @if (!empty($invoiceUrl))
-                                    <a href="{{ $invoiceUrl }}" target="_blank" rel="noopener" class="btn btn-primary btn-lg">
+                                    <a href="{{ $invoiceUrl }}" target="_blank" rel="noopener" class="btn btn-primary btn-lg ck-btn-primary">
                                         Abrir boleto / fatura
                                     </a>
                                 @else

@@ -2,7 +2,10 @@
 @section('content')
 
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-primary">GATEWAY DE PAGAMENTO</h1>
+        <div class="page-heading">
+            <i data-lucide="cable"></i>
+            <h1 class="h3 text-primary">Gateway</h1>
+        </div>
     </div>
 
     <form action="{{ route('updated-gateway') }}" method="POST">
@@ -10,9 +13,12 @@
 
         <div class="row">
             <div class="col-12 col-lg-8">
-                <div class="card shadow mb-4">
+                <div class="card gw-card mb-4">
                     <div class="card-header py-3">
-                        <h6 class="m-0 font-weight-bold text-primary">Asaas</h6>
+                        <h6 class="gw-section-title">
+                            <i data-lucide="credit-card"></i>
+                            Asaas
+                        </h6>
                     </div>
                     <div class="card-body">
                         <p class="text-muted small mb-3">
@@ -78,14 +84,17 @@
                     </div>
                 </div>
 
-                <div class="card shadow mb-4">
+                <div class="card gw-card mb-4">
                     <div class="card-header py-3">
-                        <h6 class="m-0 font-weight-bold text-primary">E-mail / SMTP</h6>
+                        <h6 class="gw-section-title">
+                            <i data-lucide="mail"></i>
+                            E-mail / SMTP
+                        </h6>
                     </div>
                     <div class="card-body">
                         <p class="text-muted small mb-3">
                             O sistema usa primeiro as variáveis do <code>.env</code>
-                            (<code>MAIL_HOST</code>, <code>MAIL_PORT</code>, <code>MAIL_USERNAME</code>,
+                            <code>MAIL_HOST</code>, <code>MAIL_PORT</code>, <code>MAIL_USERNAME</code>,
                             <code>MAIL_PASSWORD</code>, <code>MAIL_SCHEME</code>,
                             <code>MAIL_FROM_ADDRESS</code>, <code>MAIL_FROM_NAME</code> e opcionalmente <code>MAIL_BCC</code>.
                             Se estiverem vazias, usa os valores salvos abaixo.
@@ -222,7 +231,10 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary mb-4">Salvar configuração</button>
+                <button type="submit" class="btn btn-primary mb-4">
+                    <i data-lucide="save" style="width: 16px; height: 16px; vertical-align: -0.2rem;"></i>
+                    Salvar configuração
+                </button>
             </div>
         </div>
     </form>
