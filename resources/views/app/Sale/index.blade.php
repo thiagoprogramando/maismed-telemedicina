@@ -31,13 +31,13 @@
                                 @foreach ($sales as $sale)
                                     <tr>
                                         <td>
-                                            <strong>{{ $sale->user->name }}</strong><br>
-                                            <small class="text-muted">{{ $sale->user->maskCpfCnpj() }}</small>
+                                            <strong>{{ $sale->user->name ?? 'Beneficiário removido' }}</strong><br>
+                                            <small class="text-muted">{{ $sale->user ? $sale->user->maskCpfCnpj() : '—' }}</small>
                                         </td>
                                         <td>
                                             {!! $sale->labelStatus() !!}
-                                            <span class="badge bg-primary">Dependentes: {{ $sale->user->children()->count() }}</span>  
-                                            <span class="badge bg-primary">Responsável: {{ $sale->user->parent ? $sale->user->parent->name : 'N/a' }}</span> <br>
+                                            <span class="badge bg-primary">Dependentes: {{ $sale->user ? $sale->user->children()->count() : 0 }}</span>
+                                            <span class="badge bg-primary">Responsável: {{ $sale->user?->parent?->name ?? 'N/a' }}</span> <br>
                                             <span class="badge bg-primary">Planos: {{ $sale->plan->name ?? 'N/a' }}</span>
                                             <span class="badge bg-primary">Faturas: {{ $sale->invoices()->count() }}</span>
                                         </td>

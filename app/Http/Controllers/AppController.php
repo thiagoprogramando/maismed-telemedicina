@@ -13,8 +13,16 @@ class AppController extends Controller {
     public function index() {
 
         $plans      = Plan::where('status', 'active')->get();
-        $sales      = Sale::with(['user', 'plan', 'invoices'])->where('seller_id', Auth::user()->id)->latest()->paginate(30);
-        $contracts  = Sale::with(['user', 'plan', 'invoices'])->where('user_id', Auth::user()->id)->latest()->paginate(30);
+        $sales      = Sale::with(['user', 'plan', 'invoices'])
+            ->where('seller_id', Auth::user()->id)
+            ->whereHas('user')
+            ->latest()
+            ->paginate(30);
+        $contracts  = Sale::with(['user', 'plan', 'invoices'])
+            ->where('user_id', Auth::user()->id)
+            ->whereHas('user')
+            ->latest()
+            ->paginate(30);
 
         return view('app.app', [
             'plans'     => $plans,

@@ -50,8 +50,8 @@
                                     @foreach ($sales as $sale)
                                         <tr>
                                             <td>
-                                                <strong>{{ $sale->user->name }}</strong><br>
-                                                <small class="text-muted">{{ $sale->user->maskCpfCnpj() }}</small>
+                                                <strong>{{ $sale->user->name ?? 'Beneficiário removido' }}</strong><br>
+                                                <small class="text-muted">{{ $sale->user ? $sale->user->maskCpfCnpj() : '—' }}</small>
                                             </td>
                                             <td>
                                                 <a href="{{ route('sale', ['uuid' => $sale->uuid]) }}" class="btn btn-outline-dark" title="Editar"><i class="fas fa-edit fa-sm text-muted"></i></a>
@@ -108,8 +108,8 @@
                                     @foreach ($contracts as $contract)
                                         <tr>
                                             <td>
-                                                <strong>{{ $contract->user->name }}</strong><br>
-                                                <small class="text-muted">{{ $contract->user->maskCpfCnpj() }}</small>
+                                                <strong>{{ $contract->user->name ?? 'Titular removido' }}</strong><br>
+                                                <small class="text-muted">{{ $contract->user ? $contract->user->maskCpfCnpj() : '—' }}</small>
                                             </td>
                                             <td>
                                                 <a href="{{ route('sale', ['uuid' => $contract->uuid]) }}" class="btn btn-outline-dark" title="Editar"><i class="fas fa-edit fa-sm text-muted"></i></a>
