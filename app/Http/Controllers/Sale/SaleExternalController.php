@@ -12,6 +12,7 @@ use App\Models\Sale;
 use App\Mail\SalePaymentMail;
 use App\Support\AssasConfig;
 use App\Support\Kinship;
+use App\Support\MailConfig;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class SaleExternalController extends Controller {
     public function showcase(?string $parent = null) {
 
         $plans  = Plan::where('status', 'active')->orderBy('price', 'asc')->get();
-        $parent = $parent ? User::firstWhere('uuid', $parent) : null;
+        $parent = $this->resolveSeller($parent);
 
         return view('sale.showcase', compact('plans', 'parent'));
     }
@@ -40,7 +41,7 @@ class SaleExternalController extends Controller {
             return redirect()->back()->with('info', 'O plano não está disponível no momento. Fale com um de nossos consultores para obter mais informações!');
         }
 
-        $parent = $parent ? User::firstWhere('uuid', $parent) : null;
+        $parent = $this->resolveSeller($parent);
 
         return view('sale.index', [
             'plan'     => $plan,
@@ -80,12 +81,6 @@ class SaleExternalController extends Controller {
             'members.*.name'       => ['nullable', 'required_with:members.*.document', 'string', 'max:255'],
             'members.*.document'   => ['nullable', 'required_with:members.*.name', 'string'],
             'members.*.kinship'    => ['nullable', 'required_with:members.*.name', Rule::in($kinshipKeys)],
-            'card_holder'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:255'],
-            'card_number'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:25'],
-            'card_expiry'          => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:7'],
-            'card_cvv'             => ['nullable', Rule::requiredIf(fn () => $request->input('payment_method') === 'CREDIT_CARD' && $request->input('pay_timing') === 'now'), 'string', 'max:4'],
-            'postal_code'           => ['nullable', 'string', 'max:12'],
-            'address_number'       => ['nullable', 'string', 'max:20'],
         ], [
             'quantity.integer'               => 'A quantidade de pessoas deve ser um número.',
             'quantity.min'                   => 'A quantidade de pessoas deve ser no mínimo :min.',
@@ -107,10 +102,6 @@ class SaleExternalController extends Controller {
             'payment_method.in'              => 'Forma de pagamento inválida. Escolha entre Cartão de Crédito, Pix ou Boleto.',
             'pay_timing.required'            => 'Escolha se deseja pagar agora ou depois.',
             'pay_timing.in'                  => 'Opção de pagamento inválida.',
-            'card_holder.required'           => 'Informe o nome impresso no cartão.',
-            'card_number.required'           => 'Informe o número do cartão.',
-            'card_expiry.required'           => 'Informe a validade do cartão.',
-            'card_cvv.required'              => 'Informe o CVV do cartão.',
             'due_date.required'              => 'Informe o dia de vencimento das parcelas.',
             'due_date.integer'               => 'O dia de vencimento deve ser um número.',
             'due_date.min'                   => 'O dia de vencimento deve ser entre :min e :max.',
@@ -122,7 +113,7 @@ class SaleExternalController extends Controller {
         ]);
 
         if (!empty($validated['parent_id'])) {
-            $seller = User::where('uuid', $validated['parent_id'])->first();
+            $seller = $this->resolveSeller($validated['parent_id']);
             if (!$seller) {
                 return redirect()->back()->withInput()->with('infor', 'Consultor não identificado. Verifique o link de acesso com seu Consultor!');
             }
@@ -154,18 +145,25 @@ class SaleExternalController extends Controller {
             return redirect()->back()->withInput()->with('error', 'Verifique seus dados e tente novamente!');
         }
 
-        $sale              = new Sale();
-        $sale->uuid        = Str::uuid();
-        $sale->user_id     = $customer['user']->id;
-        $sale->seller_id   = $seller?->id;
-        $sale->plan_id     = $plan->id;
-        $sale->name        = $plan->name;
-        $sale->description = $plan->name;
-        $sale->price       = $quote['price'];
-        $sale->commission  = $seller ? $quote['commission'] : 0;
-        $sale->quantity    = $quote['quantity'];
-        $sale->dependents  = $quote['dependents'];
-        $sale->status      = 'pendent';
+        $payNow = ($validated['pay_timing'] ?? 'later') === 'now';
+
+        $sale                   = new Sale();
+        $sale->uuid             = Str::uuid();
+        $sale->user_id          = $customer['user']->id;
+        $sale->seller_id        = $seller?->id;
+        $sale->plan_id          = $plan->id;
+        $sale->name             = $plan->name;
+        $sale->description      = $plan->name;
+        $sale->price            = $quote['price'];
+        $sale->commission       = $seller ? $quote['commission'] : 0;
+        $sale->quantity         = $quote['quantity'];
+        $sale->dependents       = $quote['dependents'];
+        $sale->payment_method   = $validated['payment_method'];
+        $sale->pay_timing       = $validated['pay_timing'];
+        $sale->payment_features = [
+            'due_date' => (int) $validated['due_date'],
+        ];
+        $sale->status           = 'pendent';
         if (!$sale->save()) {
             Log::error('Falha ao salvar venda do checkout', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid]);
             return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, tente novamente!');
@@ -173,37 +171,9 @@ class SaleExternalController extends Controller {
 
         $this->createMembers($customer['user'], $members, $plan->isBusiness());
 
-        $payNow = ($validated['pay_timing'] ?? 'later') === 'now';
-        $cardExtras = [];
-
-        if ($payNow && $validated['payment_method'] === 'CREDIT_CARD') {
-            $expiry = preg_replace('/\D/', '', (string) $request->input('card_expiry'));
-            if (strlen($expiry) !== 4 && strlen($expiry) !== 6) {
-                return redirect()->back()->withInput()->with('error', 'Validade do cartão inválida. Use MM/AA.');
-            }
-
-            $month = substr($expiry, 0, 2);
-            $year  = strlen($expiry) === 4 ? ('20' . substr($expiry, 2, 2)) : substr($expiry, 2, 4);
-
-            $cardExtras = [
-                'creditCard' => [
-                    'holderName'  => trim((string) $request->input('card_holder')),
-                    'number'      => preg_replace('/\D/', '', (string) $request->input('card_number')),
-                    'expiryMonth' => $month,
-                    'expiryYear'  => $year,
-                    'ccv'         => preg_replace('/\D/', '', (string) $request->input('card_cvv')),
-                ],
-                'creditCardHolderInfo' => [
-                    'name'          => $validated['name'],
-                    'email'         => $validated['email'],
-                    'cpfCnpj'       => preg_replace('/\D/', '', $validated['document']),
-                    'postalCode'     => preg_replace('/\D/', '', (string) ($request->input('postal_code') ?: '00000000')),
-                    'addressNumber' => (string) ($request->input('address_number') ?: 'S/N'),
-                    'phone'         => preg_replace('/\D/', '', $validated['phone']),
-                    'mobilePhone'   => preg_replace('/\D/', '', $validated['phone']),
-                ],
-                'remoteIp' => $request->ip(),
-            ];
+        // Pagar agora: só adesão aqui; a 1ª cobrança acontece em /pay/{uuid}.
+        if ($payNow) {
+            return redirect()->route('pay', $sale->uuid);
         }
 
         try {
@@ -216,33 +186,318 @@ class SaleExternalController extends Controller {
                 $plan,
                 $validated['due_date'],
                 $validated['payment_method'],
-                $payNow,
-                $cardExtras
+                false,
+                []
             );
         } catch (\RuntimeException $e) {
             Log::error('Falha ao processar cobrança/assinatura de plano', ['plan_id' => $plan->uuid, 'seller' => $seller?->uuid, 'sale' => $sale->uuid, 'error' => $e->getMessage()]);
             return redirect()->back()->withInput()->with('error', 'Falha ao aderir o plano, nossa equipe entrará em contato com você!');
         }
 
-        if (!$payNow) {
-            $this->sendPaymentEmail($customer['user'], $plan, $sale, $validated['payment_method'], $paymentResult['first'] ?? null);
-        }
+        $this->sendPaymentEmail($customer['user'], $plan, $sale, $validated['payment_method'], $paymentResult['first'] ?? null);
 
         return redirect()->route('thank-you')->with([
-            'success' => $payNow
-                ? 'Plano contratado! Finalize o pagamento abaixo.'
-                : 'Plano salvo! Enviamos o link de pagamento para o seu e-mail.',
+            'success'  => 'Plano salvo! Enviamos o link de pagamento para o seu e-mail.',
             'checkout' => [
-                'pay_now'        => $payNow,
+                'pay_now'        => false,
                 'payment_method' => $validated['payment_method'],
                 'plan_name'      => $plan->name,
                 'price'          => (float) $sale->price,
                 'email'          => $validated['email'],
                 'invoice_url'    => $paymentResult['first']['invoiceUrl'] ?? null,
-                'pix'            => $paymentResult['pix'] ?? null,
-                'card_status'    => $paymentResult['first']['status'] ?? null,
             ],
         ]);
+    }
+
+    public function payShow(string $uuid)
+    {
+        $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
+        if (!$sale || $sale->status !== 'pendent' || !$sale->user || !$sale->plan) {
+            return redirect()->route('showcase')->with('info', 'Pagamento indisponível. Verifique o link ou fale com seu consultor.');
+        }
+
+        if (!AssasConfig::isConfigured()) {
+            return redirect()->route('showcase')->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
+        }
+
+        $method = $sale->payment_method ?: 'PIX';
+        $pix = null;
+        $invoiceUrl = null;
+        $error = null;
+
+        if (in_array($method, ['PIX', 'BOLETO'], true)) {
+            try {
+                $first = $this->ensureFirstCharge($sale, $method);
+                $invoiceUrl = $first['invoiceUrl'] ?? null;
+
+                if ($method === 'PIX' && !empty($first['id'])) {
+                    $pix = app(AssasController::class)->getPixQrCode($first['id']) ?: null;
+                    if (!$pix) {
+                        $error = 'Não foi possível gerar o QR Code PIX. Tente novamente em instantes.';
+                    }
+                }
+            } catch (\RuntimeException $e) {
+                Log::error('Falha ao preparar pagamento imediato', ['sale' => $sale->uuid, 'error' => $e->getMessage()]);
+                $error = 'Não foi possível iniciar o pagamento. Tente novamente em breve.';
+            }
+        }
+
+        return view('sale.pay', [
+            'sale'        => $sale,
+            'plan'        => $sale->plan,
+            'method'      => $method,
+            'pix'         => $pix,
+            'invoiceUrl'  => $invoiceUrl,
+            'error'       => $error,
+        ]);
+    }
+
+    public function payCard(Request $request, string $uuid)
+    {
+        $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
+        if (!$sale || $sale->status !== 'pendent' || !$sale->user || !$sale->plan) {
+            return redirect()->route('showcase')->with('info', 'Pagamento indisponível. Verifique o link ou fale com seu consultor.');
+        }
+
+        if ($sale->payment_method !== 'CREDIT_CARD') {
+            return redirect()->route('pay', $sale->uuid)->with('error', 'Esta venda não está configurada para cartão de crédito.');
+        }
+
+        if (Invoice::where('sale_id', $sale->id)->exists()) {
+            return redirect()->route('thank-you')->with([
+                'success'  => 'Pagamento já registrado. Obrigado!',
+                'checkout' => $this->checkoutFlash($sale, true, ['card_status' => 'CONFIRMED']),
+            ]);
+        }
+
+        $validated = $request->validate([
+            'card_holder'    => ['required', 'string', 'max:255'],
+            'card_number'    => ['required', 'string', 'max:25'],
+            'card_expiry'    => ['required', 'string', 'max:7'],
+            'card_cvv'       => ['required', 'string', 'max:4'],
+            'postal_code'     => ['nullable', 'string', 'max:12'],
+            'address_number' => ['nullable', 'string', 'max:20'],
+        ], [
+            'card_holder.required'  => 'Informe o nome impresso no cartão.',
+            'card_number.required'  => 'Informe o número do cartão.',
+            'card_expiry.required'  => 'Informe a validade do cartão.',
+            'card_cvv.required'     => 'Informe o CVV do cartão.',
+        ]);
+
+        $expiry = preg_replace('/\D/', '', (string) $validated['card_expiry']);
+        if (strlen($expiry) !== 4 && strlen($expiry) !== 6) {
+            return redirect()->back()->withInput()->with('error', 'Validade do cartão inválida. Use MM/AA.');
+        }
+
+        if (!AssasConfig::isConfigured()) {
+            return redirect()->back()->withInput()->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
+        }
+
+        $month = substr($expiry, 0, 2);
+        $year  = strlen($expiry) === 4 ? ('20' . substr($expiry, 2, 2)) : substr($expiry, 2, 4);
+        $user  = $sale->user;
+
+        $cardExtras = [
+            'creditCard' => [
+                'holderName'  => trim($validated['card_holder']),
+                'number'      => preg_replace('/\D/', '', $validated['card_number']),
+                'expiryMonth' => $month,
+                'expiryYear'  => $year,
+                'ccv'         => preg_replace('/\D/', '', $validated['card_cvv']),
+            ],
+            'creditCardHolderInfo' => [
+                'name'          => $user->name,
+                'email'         => $user->email,
+                'cpfCnpj'       => preg_replace('/\D/', '', (string) $user->document),
+                'postalCode'     => preg_replace('/\D/', '', (string) ($validated['postal_code'] ?? '00000000')) ?: '00000000',
+                'addressNumber' => (string) ($validated['address_number'] ?? 'S/N') ?: 'S/N',
+                'phone'         => preg_replace('/\D/', '', (string) $user->phone),
+                'mobilePhone'   => preg_replace('/\D/', '', (string) $user->phone),
+            ],
+            'remoteIp' => $request->ip(),
+        ];
+
+        $assasController = app(AssasController::class);
+        $chargeId = null;
+
+        try {
+            $charge = $assasController->createdCharge(
+                $user->token,
+                'CREDIT_CARD',
+                1,
+                $sale->price,
+                'Plano: ' . $sale->plan->name,
+                now(),
+                $cardExtras
+            );
+
+            if ($charge === false || empty($charge['id'])) {
+                return redirect()->back()->withInput()->with('error', 'Cartão recusado. Verifique os dados e tente novamente.');
+            }
+
+            $chargeId = $charge['id'];
+            $seller   = $sale->seller_id ? User::find($sale->seller_id) : null;
+            $dueDay   = (int) (($sale->payment_features['due_date'] ?? null) ?: now()->day);
+
+            DB::transaction(function () use ($sale, $seller, $dueDay, $charge) {
+                $this->createInvoice(
+                    $seller,
+                    $sale,
+                    $sale->plan,
+                    'Plano: ' . $sale->plan->name,
+                    'CREDIT_CARD',
+                    $dueDay,
+                    now(),
+                    $charge
+                );
+                $this->createCommission($seller, $sale, $sale->plan, now(), $charge);
+            });
+
+            // 1ª avulsa já cobrada: assinatura cobre os 11 ciclos restantes (contrato 12 meses).
+            $subscriptionExtras = [
+                'remoteIp' => $request->ip(),
+            ];
+            if (!empty($charge['creditCardToken'])) {
+                $subscriptionExtras['creditCardToken'] = $charge['creditCardToken'];
+            } else {
+                $subscriptionExtras['creditCard'] = $cardExtras['creditCard'];
+                $subscriptionExtras['creditCardHolderInfo'] = $cardExtras['creditCardHolderInfo'];
+            }
+
+            $this->startSubscription($assasController, $sale, 'CREDIT_CARD', $subscriptionExtras);
+        } catch (\Throwable $e) {
+            if ($chargeId) {
+                $assasController->canceledCharge($chargeId);
+            }
+            Log::error('Falha no pagamento com cartão', ['sale' => $sale->uuid, 'error' => $e->getMessage()]);
+            return redirect()->back()->withInput()->with('error', 'Não foi possível processar o cartão. Tente novamente.');
+        }
+
+        $sale->refresh();
+
+        return redirect()->route('thank-you')->with([
+            'success'  => 'Pagamento da 1ª parcela enviado!',
+            'checkout' => $this->checkoutFlash($sale, true, [
+                'card_status' => $charge['status'] ?? null,
+                'invoice_url' => $charge['invoiceUrl'] ?? null,
+            ]),
+        ]);
+    }
+
+    private function ensureFirstCharge(Sale $sale, string $billingType): array
+    {
+        $existing = Invoice::where('sale_id', $sale->id)->orderBy('id')->first();
+        if ($existing && $existing->payment_token) {
+            return [
+                'id'         => $existing->payment_token,
+                'invoiceUrl' => $existing->payment_url,
+                'status'     => $existing->status,
+            ];
+        }
+
+        $assasController = app(AssasController::class);
+        $seller          = $sale->seller_id ? User::find($sale->seller_id) : null;
+        $dueDay          = (int) (($sale->payment_features['due_date'] ?? null) ?: now()->day);
+        $chargeId        = null;
+
+        try {
+            $charge = $assasController->createdCharge(
+                $sale->user->token,
+                $billingType,
+                1,
+                $sale->price,
+                'Plano: ' . $sale->plan->name,
+                now(),
+                []
+            );
+
+            if ($charge === false || empty($charge['id'])) {
+                throw new \RuntimeException('Cobrança da 1ª parcela recusada pelo Asaas.');
+            }
+
+            $chargeId = $charge['id'];
+
+            DB::transaction(function () use ($sale, $seller, $dueDay, $billingType, $charge) {
+                $this->createInvoice(
+                    $seller,
+                    $sale,
+                    $sale->plan,
+                    'Plano: ' . $sale->plan->name,
+                    $billingType,
+                    $dueDay,
+                    now(),
+                    $charge
+                );
+                $this->createCommission($seller, $sale, $sale->plan, now(), $charge);
+            });
+
+            // PIX/boleto: 1ª avulsa + assinatura dos 11 ciclos restantes (se a API aceitar billingType).
+            $this->startSubscription($assasController, $sale, $billingType, []);
+
+            return $charge;
+        } catch (\Throwable $e) {
+            if ($chargeId) {
+                $assasController->canceledCharge($chargeId);
+            }
+
+            throw $e instanceof \RuntimeException ? $e : new \RuntimeException($e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Cria assinatura Asaas MONTHLY para os ciclos restantes do contrato (após 1ª parcela avulsa).
+     * maxPayments = 11 → total 12 meses com a 1ª já cobrada.
+     */
+    private function startSubscription(AssasController $assasController, Sale $sale, string $billingType, array $extras = []): void
+    {
+        if (!empty($sale->subscription_token) || !$sale->user?->token) {
+            return;
+        }
+
+        $dueDay = (int) (($sale->payment_features['due_date'] ?? null) ?: now()->day);
+        $nextMonth = now()->startOfMonth()->addMonth();
+        $nextDueDate = $nextMonth->copy()->day(min($dueDay, $nextMonth->daysInMonth));
+
+        $subscriptionExtras = array_merge([
+            'maxPayments' => self::INSTALLMENTS - 1,
+        ], $extras);
+
+        try {
+            $subscription = $assasController->createdSubscription(
+                $sale->user->token,
+                $billingType,
+                $sale->price,
+                $nextDueDate,
+                'Plano: ' . ($sale->plan->name ?? $sale->name),
+                $subscriptionExtras
+            );
+        } catch (\Throwable $e) {
+            Log::error('Falha ao criar assinatura Asaas após 1ª parcela', [
+                'sale'  => $sale->uuid,
+                'error' => $e->getMessage(),
+            ]);
+            return;
+        }
+
+        if ($subscription === false || empty($subscription['id'])) {
+            Log::error('Assinatura Asaas não criada após 1ª parcela', ['sale' => $sale->uuid]);
+            return;
+        }
+
+        $sale->subscription_token = $subscription['id'];
+        $sale->contract_months    = self::INSTALLMENTS;
+        $sale->save();
+    }
+
+    private function checkoutFlash(Sale $sale, bool $payNow, array $extra = []): array
+    {
+        return array_merge([
+            'pay_now'        => $payNow,
+            'payment_method' => $sale->payment_method,
+            'plan_name'      => $sale->plan->name ?? $sale->name,
+            'price'          => (float) $sale->price,
+            'email'          => $sale->user->email ?? null,
+        ], $extra);
     }
 
     private function normalizeMembers(array $raw): array {
@@ -328,6 +583,17 @@ class SaleExternalController extends Controller {
         }
     }
 
+    private function resolveSeller(?string $uuid): ?User
+    {
+        if (empty($uuid)) {
+            return null;
+        }
+
+        return User::where('uuid', $uuid)
+            ->whereIn('roles', ['admin', 'collaborator'])
+            ->first();
+    }
+
     private function defaultSeller(): ?User {
 
         $uuid = config('services.maismed.default_seller');
@@ -335,7 +601,7 @@ class SaleExternalController extends Controller {
             return null;
         }
 
-        $seller = User::where('uuid', $uuid)->first();
+        $seller = $this->resolveSeller($uuid);
         if (!$seller) {
             Log::warning('Consultor padrão do checkout não encontrado', ['uuid' => $uuid]);
         }
@@ -433,6 +699,8 @@ class SaleExternalController extends Controller {
             return;
         }
 
+        MailConfig::apply();
+
         $labels = [
             'CREDIT_CARD' => 'Cartão de Crédito',
             'PIX'         => 'PIX',
@@ -440,7 +708,13 @@ class SaleExternalController extends Controller {
         ];
 
         try {
-            Mail::to($customer->email)->send(new SalePaymentMail([
+            $mailer = Mail::to($customer->email);
+            $bcc = MailConfig::bcc();
+            if (!empty($bcc)) {
+                $mailer->bcc($bcc);
+            }
+
+            $mailer->send(new SalePaymentMail([
                 'subject'              => 'Pagamento do plano ' . $plan->name . ' - ' . config('app.name'),
                 'fromEmail'            => config('mail.from.address'),
                 'fromName'             => config('mail.from.name', config('app.name')),

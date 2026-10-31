@@ -115,4 +115,12 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Optional BCC (cópia oculta de e-mails de adesão/pagamento)
+    |--------------------------------------------------------------------------
+    */
+
+    'bcc' => env('MAIL_BCC'),
+
 ];

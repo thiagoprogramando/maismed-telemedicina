@@ -208,27 +208,10 @@
                                                         </div>
                                                     </div>
 
-                                                    <div id="card-fields" class="border rounded p-3 mb-3 d-none">
-                                                        <p class="small text-muted mb-2">Cadastre o cartão para pagar a 1ª parcela agora e manter a recorrência das demais.</p>
-                                                        <div class="row">
-                                                            <div class="form-group col-12">
-                                                                <input type="text" name="card_holder" id="card_holder" class="form-control" value="{{ old('card_holder') }}" placeholder="Nome impresso no cartão" autocomplete="cc-name">
-                                                            </div>
-                                                            <div class="form-group col-12">
-                                                                <input type="text" name="card_number" id="card_number" class="form-control" value="{{ old('card_number') }}" placeholder="Número do cartão" inputmode="numeric" autocomplete="cc-number" maxlength="19">
-                                                            </div>
-                                                            <div class="form-group col-6">
-                                                                <input type="text" name="card_expiry" id="card_expiry" class="form-control" value="{{ old('card_expiry') }}" placeholder="MM/AA" inputmode="numeric" autocomplete="cc-exp" maxlength="5">
-                                                            </div>
-                                                            <div class="form-group col-6">
-                                                                <input type="text" name="card_cvv" id="card_cvv" class="form-control" value="{{ old('card_cvv') }}" placeholder="CVV" inputmode="numeric" autocomplete="cc-csc" maxlength="4">
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <p class="small text-muted" id="pay-later-hint">Ao escolher pagar depois, salvamos a adesão e enviamos o link de pagamento para o seu e-mail.</p>
+                                                    <p class="small text-muted" id="pay-now-hint">Ao confirmar, vamos para a tela de pagamento (PIX ou cartão) da 1ª parcela.</p>
+                                                    <p class="small text-muted d-none" id="pay-later-hint">Ao escolher pagar depois, salvamos a adesão e enviamos o link de pagamento para o seu e-mail.</p>
                                                     
-                                                    <button type="submit" class="btn btn-primary btn-user btn-block" id="checkout-submit"> Confirmar e continuar </button>
+                                                    <button type="submit" class="btn btn-primary btn-user btn-block" id="checkout-submit"> Confirmar adesão e pagar </button>
                                                 </div>
                                             </div>
                                         </form>
@@ -402,32 +385,13 @@
 
             function syncPaymentUi() {
                 var payNow = $('#pay_timing').val() === 'now';
-                var method = $('#payment_method').val();
-                var showCard = payNow && method === 'CREDIT_CARD';
-                $('#card-fields').toggleClass('d-none', !showCard);
+                $('#pay-now-hint').toggleClass('d-none', !payNow);
                 $('#pay-later-hint').toggleClass('d-none', payNow);
-                $('#checkout-submit').text(payNow ? 'Pagar e finalizar' : 'Salvar e enviar por e-mail');
+                $('#checkout-submit').text(payNow ? 'Confirmar adesão e pagar' : 'Salvar e enviar por e-mail');
             }
 
-            $('#pay_timing, #payment_method').on('change', syncPaymentUi);
+            $('#pay_timing').on('change', syncPaymentUi);
             syncPaymentUi();
-
-            $('#card_number').on('input', function () {
-                var digits = this.value.replace(/\D/g, '').slice(0, 16);
-                this.value = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
-            });
-
-            $('#card_expiry').on('input', function () {
-                var digits = this.value.replace(/\D/g, '').slice(0, 4);
-                if (digits.length >= 3) {
-                    digits = digits.slice(0, 2) + '/' + digits.slice(2);
-                }
-                this.value = digits;
-            });
-
-            $('#card_cvv').on('input', function () {
-                this.value = this.value.replace(/\D/g, '').slice(0, 4);
-            });
         </script>
     </body>
 </html>

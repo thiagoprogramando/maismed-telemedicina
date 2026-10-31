@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\AssasConfig;
+use App\Support\MailConfig;
 use Database\Seeders\FirstUser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -89,6 +90,132 @@ class GatewayConfigTest extends TestCase
         $this->assertSame('db_token', AssasConfig::token());
         $this->assertSame('database', AssasConfig::source());
         $this->assertTrue(AssasConfig::isConfigured());
+    }
+
+    public function test_admin_can_save_smtp_settings(): void
+    {
+        $admin = $this->admin();
+
+        $this->actingAs($admin)
+            ->get('/gateway')
+            ->assertOk()
+            ->assertSee('E-mail / SMTP', false);
+
+        $this->actingAs($admin)
+            ->post('/updated-gateway', [
+                'asaas_api_url'     => 'https://sandbox.asaas.com/api',
+                'asaas_api_token'   => 'tok_sandbox_123',
+                'smtp_host'         => 'smtp.example.com',
+                'smtp_port'         => 587,
+                'smtp_username'     => 'mailer@example.com',
+                'smtp_password'     => 'secret-smtp',
+                'smtp_encryption'   => 'tls',
+                'smtp_from_address' => 'noreply@example.com',
+                'smtp_from_name'    => 'MaisMed',
+                'smtp_bcc'          => 'copia@example.com',
+            ])
+            ->assertRedirect(route('gateway'));
+
+        $this->assertSame('smtp.example.com', Setting::getValue('smtp_host'));
+        $this->assertSame('587', Setting::getValue('smtp_port'));
+        $this->assertSame('mailer@example.com', Setting::getValue('smtp_username'));
+        $this->assertSame('secret-smtp', Setting::getSecret('smtp_password'));
+        $this->assertSame('tls', Setting::getValue('smtp_encryption'));
+        $this->assertSame('noreply@example.com', Setting::getValue('smtp_from_address'));
+        $this->assertSame('MaisMed', Setting::getValue('smtp_from_name'));
+        $this->assertSame('copia@example.com', Setting::getValue('smtp_bcc'));
+
+        // Senha em branco não sobrescreve.
+        $this->actingAs($admin)
+            ->post('/updated-gateway', [
+                'smtp_host'         => 'smtp.example.com',
+                'smtp_port'         => 587,
+                'smtp_username'     => 'mailer@example.com',
+                'smtp_password'     => '',
+                'smtp_encryption'   => 'tls',
+                'smtp_from_address' => 'noreply@example.com',
+                'smtp_from_name'    => 'MaisMed',
+                'smtp_bcc'          => 'copia@example.com',
+            ])
+            ->assertRedirect(route('gateway'));
+
+        $this->assertSame('secret-smtp', Setting::getSecret('smtp_password'));
+    }
+
+    public function test_mail_config_prefers_env_over_database(): void
+    {
+        Setting::putValue('smtp_host', 'smtp.from-db.example');
+        Setting::putValue('smtp_port', '465');
+        Setting::putValue('smtp_username', 'db@example.com');
+        Setting::putSecret('smtp_password', 'db_pass');
+        Setting::putValue('smtp_encryption', 'ssl');
+        Setting::putValue('smtp_from_address', 'db-from@example.com');
+        Setting::putValue('smtp_from_name', 'From DB');
+        Setting::putValue('smtp_bcc', 'db-bcc@example.com');
+
+        config([
+            'mail.mailers.smtp.host'     => 'smtp.from-env.example',
+            'mail.mailers.smtp.port'     => 587,
+            'mail.mailers.smtp.username' => 'env@example.com',
+            'mail.mailers.smtp.password' => 'env_pass',
+            'mail.mailers.smtp.scheme'   => 'tls',
+            'mail.from.address'          => 'env-from@example.com',
+            'mail.from.name'             => 'From Env',
+            'mail.bcc'                   => 'env-bcc@example.com',
+        ]);
+
+        $this->assertSame('smtp.from-env.example', MailConfig::host());
+        $this->assertSame(587, MailConfig::port());
+        $this->assertSame('env@example.com', MailConfig::username());
+        $this->assertSame('env_pass', MailConfig::password());
+        $this->assertSame('tls', MailConfig::encryption());
+        $this->assertSame('env-from@example.com', MailConfig::fromAddress());
+        $this->assertSame('From Env', MailConfig::fromName());
+        $this->assertSame('env-bcc@example.com', MailConfig::bcc());
+        $this->assertSame('env', MailConfig::source());
+        $this->assertTrue(MailConfig::isConfigured());
+    }
+
+    public function test_mail_config_falls_back_to_database_when_env_is_empty(): void
+    {
+        Setting::putValue('smtp_host', 'smtp.from-db.example');
+        Setting::putValue('smtp_port', '465');
+        Setting::putValue('smtp_username', 'db@example.com');
+        Setting::putSecret('smtp_password', 'db_pass');
+        Setting::putValue('smtp_encryption', 'ssl');
+        Setting::putValue('smtp_from_address', 'db-from@example.com');
+        Setting::putValue('smtp_from_name', 'From DB');
+        Setting::putValue('smtp_bcc', 'db-bcc@example.com');
+
+        config([
+            'mail.mailers.smtp.host'     => null,
+            'mail.mailers.smtp.port'     => null,
+            'mail.mailers.smtp.username' => null,
+            'mail.mailers.smtp.password' => null,
+            'mail.mailers.smtp.scheme'   => null,
+            'mail.from.address'          => null,
+            'mail.from.name'             => null,
+            'mail.bcc'                   => null,
+        ]);
+
+        $this->assertSame('smtp.from-db.example', MailConfig::host());
+        $this->assertSame(465, MailConfig::port());
+        $this->assertSame('db@example.com', MailConfig::username());
+        $this->assertSame('db_pass', MailConfig::password());
+        $this->assertSame('ssl', MailConfig::encryption());
+        $this->assertSame('db-from@example.com', MailConfig::fromAddress());
+        $this->assertSame('From DB', MailConfig::fromName());
+        $this->assertSame('db-bcc@example.com', MailConfig::bcc());
+        $this->assertSame('database', MailConfig::source());
+        $this->assertTrue(MailConfig::isConfigured());
+
+        MailConfig::apply();
+
+        $this->assertSame('smtp', config('mail.default'));
+        $this->assertSame('smtp.from-db.example', config('mail.mailers.smtp.host'));
+        $this->assertSame(465, config('mail.mailers.smtp.port'));
+        $this->assertSame('db-from@example.com', config('mail.from.address'));
+        $this->assertSame('smtps', config('mail.mailers.smtp.scheme'));
     }
 
     public function test_checkout_page_uses_absolute_fontawesome_and_collapsed_contract(): void

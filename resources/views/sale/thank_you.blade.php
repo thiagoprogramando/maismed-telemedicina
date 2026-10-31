@@ -49,21 +49,9 @@
                                             </p>
                                         </div>
 
-                                        @if (!empty($checkout['pay_now']) && ($checkout['payment_method'] ?? null) === 'PIX' && !empty($checkout['pix']['payload']))
-                                            <div class="border rounded p-3 mb-3 text-center">
-                                                <h2 class="h5 text-primary">Pague com PIX agora</h2>
-                                                <p class="small text-muted">Escaneie o QR Code ou copie o código para pagar a 1ª parcela nesta tela.</p>
-                                                @if (!empty($checkout['pix']['encodedImage']))
-                                                    <img src="data:image/png;base64,{{ $checkout['pix']['encodedImage'] }}" alt="QR Code PIX" class="img-fluid mb-3" style="max-width: 220px;">
-                                                @endif
-                                                <div class="input-group mb-2">
-                                                    <input type="text" class="form-control" id="pix-payload" value="{{ $checkout['pix']['payload'] }}" readonly>
-                                                    <button type="button" class="btn btn-primary" id="copy-pix">Copiar</button>
-                                                </div>
-                                            </div>
-                                        @elseif (!empty($checkout['pay_now']) && ($checkout['payment_method'] ?? null) === 'CREDIT_CARD')
+                                        @if (!empty($checkout['pay_now']) && ($checkout['payment_method'] ?? null) === 'CREDIT_CARD')
                                             <div class="alert alert-success">
-                                                Cartão cadastrado para recorrência.
+                                                Pagamento com cartão enviado.
                                                 @if (!empty($checkout['card_status']) && in_array($checkout['card_status'], ['CONFIRMED', 'RECEIVED'], true))
                                                     A 1ª parcela já foi confirmada.
                                                 @else
@@ -116,14 +104,6 @@
                     timer: 3500
                 });
             @endif
-
-            $('#copy-pix').on('click', function () {
-                var input = document.getElementById('pix-payload');
-                if (!input) return;
-                navigator.clipboard.writeText(input.value).then(function () {
-                    Swal.fire({ title: 'Copiado!', text: 'Código PIX copiado.', icon: 'success', timer: 1800 });
-                });
-            });
         </script>
     </body>
 </html>

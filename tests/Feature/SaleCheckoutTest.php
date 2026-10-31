@@ -13,6 +13,7 @@ use Database\Seeders\FirstUser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Tests\Support\FakeAssasController;
 use Tests\TestCase;
 
 class SaleCheckoutTest extends TestCase
@@ -199,6 +200,30 @@ class SaleCheckoutTest extends TestCase
         $this->assertCount(0, $this->asaas->charges);
     }
 
+    public function test_user_role_cannot_be_seller_on_adhesion_link(): void
+    {
+        $this->seller();
+
+        $regular             = new User();
+        $regular->uuid       = (string) Str::uuid();
+        $regular->name       = 'Usuario Comum';
+        $regular->email      = 'user@example.com';
+        $regular->document   = '52998224725';
+        $regular->phone      = '11977776666';
+        $regular->password   = bcrypt('secret');
+        $regular->birth_date = '1990-01-01';
+        $regular->roles      = 'user';
+        $regular->status     = 'active';
+        $regular->save();
+
+        $plan = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $this->checkout($plan, $regular, ['parent_id' => $regular->uuid])->assertSessionHas('infor');
+
+        $this->assertSame(0, Sale::count());
+        $this->assertCount(0, $this->asaas->charges);
+    }
+
     public function test_failed_installment_cancels_charges_already_created_in_asaas(): void
     {
         $seller = $this->seller();
@@ -272,7 +297,7 @@ class SaleCheckoutTest extends TestCase
         });
     }
 
-    public function test_pay_now_pix_returns_qr_code_on_thank_you_session(): void
+    public function test_pay_now_pix_redirects_to_payment_page_without_charges(): void
     {
         $seller = $this->seller();
         $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
@@ -282,102 +307,25 @@ class SaleCheckoutTest extends TestCase
             'pay_timing'     => 'now',
         ]);
 
-        $response->assertRedirect(route('thank-you'));
-        $response->assertSessionHas('checkout.pix.payload', '00020126580014br.gov.bcb.pix');
+        $sale = Sale::first();
+        $response->assertRedirect(route('pay', $sale->uuid));
+        $this->assertCount(0, $this->asaas->charges);
         Mail::assertNothingSent();
     }
 
-    public function test_pay_now_credit_card_requires_card_fields(): void
+    public function test_pay_now_credit_card_redirects_to_payment_page_without_card_fields_on_store(): void
     {
         $seller = $this->seller();
         $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
 
-        $this->checkout($plan, $seller, [
+        $response = $this->checkout($plan, $seller, [
             'payment_method' => 'CREDIT_CARD',
             'pay_timing'     => 'now',
-        ])->assertSessionHasErrors(['card_holder', 'card_number', 'card_expiry', 'card_cvv']);
-    }
+        ]);
 
-    public function test_pay_now_credit_card_charges_with_token_recurrence(): void
-    {
-        $seller = $this->seller();
-        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
-
-        $this->checkout($plan, $seller, [
-            'payment_method' => 'CREDIT_CARD',
-            'pay_timing'     => 'now',
-            'card_holder'    => 'Cliente Teste',
-            'card_number'    => '5162306219378829',
-            'card_expiry'    => '05/30',
-            'card_cvv'       => '318',
-            'postal_code'     => '01310-100',
-            'address_number' => '100',
-        ])->assertRedirect(route('thank-you'));
-
-        $this->assertCount(12, $this->asaas->charges);
-        $this->assertNotEmpty($this->asaas->cardExtras[0]['creditCard'] ?? null);
-        $this->assertSame('tok_fake', $this->asaas->cardExtras[1]['creditCardToken'] ?? null);
-        $this->assertSame(12, Invoice::count());
-    }
-}
-
-class FakeAssasController extends AssasController
-{
-    public array $charges = [];
-    public array $canceled = [];
-    public array $cardExtras = [];
-    public ?int $failAt = null;
-
-    public function createdCustomer($name, $cpfcnpj, $mobilePhone = null, $email = null, $birth_date = null)
-    {
-        $user = User::firstWhere('document', $cpfcnpj) ?? new User();
-
-        $user->uuid     = $user->uuid ?? Str::uuid();
-        $user->name     = $name;
-        $user->document = $cpfcnpj;
-        $user->phone    = $mobilePhone;
-        $user->email    = $email;
-        $user->password   = bcrypt('secret');
-        $user->birth_date = $birth_date;
-        $user->token    = 'cus_fake';
-        $user->save();
-
-        return ['user' => $user, 'id' => $user->token];
-    }
-
-    public function createdCharge($customer, $billingType, $installments, $value, $description, $dueDate, array $extras = [])
-    {
-        if ($this->failAt !== null && count($this->charges) + 1 === $this->failAt) {
-            return false;
-        }
-
-        $this->charges[] = number_format((float) $value, 2, '.', '');
-        $this->cardExtras[] = $extras;
-
-        $id = 'pay_' . count($this->charges);
-
-        return [
-            'id'              => $id,
-            'invoiceUrl'      => 'https://example.test/' . $id,
-            'status'          => !empty($extras['creditCard']) || !empty($extras['creditCardToken']) ? 'CONFIRMED' : 'PENDING',
-            'creditCardToken' => !empty($extras['creditCard']) ? 'tok_fake' : ($extras['creditCardToken'] ?? null),
-            'splits'          => [],
-        ];
-    }
-
-    public function getPixQrCode(string $paymentId)
-    {
-        return [
-            'encodedImage'   => 'aGVsbG8=',
-            'payload'        => '00020126580014br.gov.bcb.pix',
-            'expirationDate' => now()->addDay()->toIso8601String(),
-        ];
-    }
-
-    public function canceledCharge($token)
-    {
-        $this->canceled[] = $token;
-
-        return true;
+        $sale = Sale::first();
+        $response->assertRedirect(route('pay', $sale->uuid));
+        $this->assertCount(0, $this->asaas->charges);
+        $this->assertSame(0, Invoice::count());
     }
 }

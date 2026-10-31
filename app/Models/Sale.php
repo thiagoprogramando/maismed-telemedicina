@@ -18,8 +18,16 @@ class Sale extends Model {
         'commission',
         'quantity',
         'dependents',
+        'payment_method',
+        'pay_timing',
+        'subscription_token',
+        'contract_months',
         'payment_features',
         'status'
+    ];
+
+    protected $casts = [
+        'payment_features' => 'array',
     ];
 
     // Limite de pessoas (titular + dependentes) da venda. Vendas sem quantidade contratada seguem o limite do plano.

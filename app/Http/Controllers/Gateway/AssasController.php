@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Extract;
 use App\Models\User;
 use App\Models\Invoice;
+use App\Models\Sale;
 use App\Support\AssasConfig;
 
 use Illuminate\Http\Request;
@@ -258,6 +259,137 @@ class AssasController extends Controller {
         }
     }
 
+    /**
+     * Cria assinatura mensal no Asaas (recorrência).
+     * Preferir creditCardToken quando a 1ª parcela avulsa já foi cobrada.
+     *
+     * @return array{id: string, status: ?string, creditCardToken: ?string}|false
+     */
+    public function createdSubscription($customer, $billingType, $value, $nextDueDate, $description, array $extras = []): array|false
+    {
+        try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
+            $client = new Client([
+                'timeout'         => 60,
+                'connect_timeout' => 15,
+            ]);
+
+            $maxPayments = (int) ($extras['maxPayments'] ?? 12);
+            if ($maxPayments < 1) {
+                $maxPayments = 12;
+            }
+
+            $payload = [
+                'customer'    => $customer,
+                'billingType' => $billingType,
+                'value'       => number_format((float) $value, 2, '.', ''),
+                'nextDueDate' => Carbon::parse($nextDueDate)->format('Y-m-d'),
+                'cycle'       => 'MONTHLY',
+                'description' => $description,
+                'maxPayments' => $maxPayments,
+            ];
+
+            if (!empty($extras['creditCardToken'])) {
+                $payload['creditCardToken'] = $extras['creditCardToken'];
+            } elseif (!empty($extras['creditCard'])) {
+                $payload['creditCard'] = $extras['creditCard'];
+                if (!empty($extras['creditCardHolderInfo'])) {
+                    $payload['creditCardHolderInfo'] = $extras['creditCardHolderInfo'];
+                }
+            }
+
+            if (!empty($extras['remoteIp'])) {
+                $payload['remoteIp'] = $extras['remoteIp'];
+            }
+
+            $response = $client->post(AssasConfig::url() . 'v3/subscriptions', [
+                'headers' => $this->headers(),
+                'json'    => $payload,
+                'verify'  => !app()->environment('local'),
+            ]);
+            $body = (string) $response->getBody();
+
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode($body, true);
+
+                return [
+                    'id'              => $data['id'],
+                    'status'          => $data['status'] ?? null,
+                    'creditCardToken' => $data['creditCard']['creditCardToken'] ?? ($data['creditCardToken'] ?? null),
+                ];
+            }
+
+            Log::error('Erro ao criar assinatura Asaas de ' . $customer . ': ' . $body);
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao criar assinatura Asaas de ' . $customer . ': ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function canceledSubscription($id): bool
+    {
+        try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
+            $client = new Client();
+            $response = $client->delete(AssasConfig::url() . 'v3/subscriptions/' . $id, [
+                'headers' => $this->headers(),
+                'verify'  => !app()->environment('local'),
+            ]);
+
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode((string) $response->getBody(), true);
+                return isset($data['deleted']) && $data['deleted'] === true;
+            }
+
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao cancelar assinatura Asaas (ID: ' . $id . '): ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Lista cobranças geradas por uma assinatura.
+     *
+     * @return array|false
+     */
+    public function listSubscriptionPayments($id): array|false
+    {
+        try {
+            if (!$this->ensureConfigured()) {
+                return false;
+            }
+
+            $client = new Client([
+                'timeout'         => 30,
+                'connect_timeout' => 10,
+            ]);
+            $response = $client->get(AssasConfig::url() . 'v3/subscriptions/' . $id . '/payments', [
+                'headers' => $this->headers(),
+                'verify'  => !app()->environment('local'),
+            ]);
+            $body = (string) $response->getBody();
+
+            if ($response->getStatusCode() === 200) {
+                $data = json_decode($body, true);
+                return $data['data'] ?? [];
+            }
+
+            Log::error('Erro ao listar pagamentos da assinatura ' . $id . ': ' . $body);
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao listar pagamentos da assinatura ' . $id . ': ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function webhook(Request $request) {
 
         $jsonData   = $request->json()->all();
@@ -271,10 +403,11 @@ class AssasController extends Controller {
                 $invoice->status = 'paid';
                 if ($invoice->save()) {
                     
-                    $user = $invoice->user;
-                    if ($user) {
-                        $user->status = 'active';
-                        $user->save();
+                    // Ativa o comprador (titular da venda), não o consultor em invoice.user_id.
+                    $sale = Sale::find($invoice->sale_id);
+                    if ($sale && $sale->user) {
+                        $sale->user->status = 'active';
+                        $sale->user->save();
                     }
 
                     $extract = Extract::where('payment_token', $token) ->first();

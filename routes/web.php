@@ -23,6 +23,8 @@ Route::get('/planos/{parent?}', [SaleExternalController::class, 'showcase'])->na
 Route::get('/create-sale/{plan}/{parent?}', [SaleExternalController::class, 'index'])->name('create-sale');
 Route::get('/thank-you', [SaleExternalController::class, 'thankYou'])->name('thank-you');
 Route::post('created-sale', [SaleExternalController::class, 'store'])->name('created-sale');
+Route::get('/pay/{uuid}', [SaleExternalController::class, 'payShow'])->name('pay');
+Route::post('/pay/{uuid}/card', [SaleExternalController::class, 'payCard'])->name('pay-card');
 
 Route::middleware(['auth'])->group(function () {
 
