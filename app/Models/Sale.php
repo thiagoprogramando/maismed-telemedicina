@@ -76,4 +76,29 @@ class Sale extends Model {
                 break;
         }
     }
+
+    /**
+     * Venda pendente com fatura paga (webhook antigo / falha parcial) → ativa venda e titular.
+     */
+    public static function healPaidPending(): int
+    {
+        $sales = static::query()
+            ->where('status', 'pendent')
+            ->whereHas('invoices', fn ($q) => $q->where('status', 'paid'))
+            ->with('user')
+            ->get();
+
+        foreach ($sales as $sale) {
+            $sale->status = 'active';
+            $sale->save();
+
+            if ($sale->user && $sale->user->status !== 'active') {
+                $sale->user->status = 'active';
+                $sale->user->save();
+                User::where('parent_id', $sale->user_id)->update(['status' => 'active']);
+            }
+        }
+
+        return $sales->count();
+    }
 }

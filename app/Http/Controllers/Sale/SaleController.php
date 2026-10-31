@@ -65,6 +65,9 @@ class SaleController extends Controller {
         if (!empty($validated['date_end'])) {
             $query->where('created_at', '<=', Carbon::parse($validated['date_end'])->endOfDay());
         }
+
+        // Fatura "Pago" + venda "Pendente" = inconsistência; alinha antes de listar.
+        Sale::healPaidPending();
     
         $sales  = $query->with(['user', 'plan'])->latest()->paginate(30)->withQueryString();
  
@@ -75,6 +78,8 @@ class SaleController extends Controller {
     }
     
     public function show ($uuid) {
+
+        Sale::healPaidPending();
 
         $sale = Sale::with(['user', 'plan', 'invoices'])->where('uuid', $uuid)->firstOrFail();
         return view('app.Sale.show', [

@@ -377,6 +377,59 @@ class SalePaymentTest extends TestCase
         $this->assertEquals(7.0, (float) $seller->wallet);
     }
 
+    public function test_sales_list_heals_pending_sale_when_invoice_already_paid(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $buyer             = new User();
+        $buyer->uuid       = (string) \Illuminate\Support\Str::uuid();
+        $buyer->name       = 'Diego';
+        $buyer->email      = 'diego-heal@example.com';
+        $buyer->document   = '08746658416';
+        $buyer->phone      = '84999731202';
+        $buyer->password   = bcrypt('secret');
+        $buyer->birth_date = '1990-07-27';
+        $buyer->roles      = 'user';
+        $buyer->status     = 'inactive';
+        $buyer->save();
+
+        $sale                 = new Sale();
+        $sale->uuid           = (string) \Illuminate\Support\Str::uuid();
+        $sale->user_id        = $buyer->id;
+        $sale->seller_id      = $seller->id;
+        $sale->plan_id        = $plan->id;
+        $sale->name           = $plan->name;
+        $sale->description    = $plan->name;
+        $sale->price          = 5;
+        $sale->commission     = 0;
+        $sale->payment_method = 'PIX';
+        $sale->status         = 'pendent';
+        $sale->save();
+
+        $invoice                   = new Invoice();
+        $invoice->uuid             = (string) \Illuminate\Support\Str::uuid();
+        $invoice->user_id          = $seller->id;
+        $invoice->sale_id          = $sale->id;
+        $invoice->name             = $plan->name;
+        $invoice->description      = 'Plano: INDIVIDUAL';
+        $invoice->price            = 5;
+        $invoice->commission       = 0;
+        $invoice->payment_token    = 'pay_heal_1';
+        $invoice->payment_url      = 'https://example.test/pay_heal_1';
+        $invoice->payment_due_date = now();
+        $invoice->status           = 'paid';
+        $invoice->save();
+
+        $this->actingAs($seller)->get(route('sales'))->assertOk();
+
+        $sale->refresh();
+        $buyer->refresh();
+        $this->assertSame('active', $sale->status);
+        $this->assertSame('active', $buyer->status);
+        $this->assertStringContainsString('Ativo', $sale->labelStatus());
+    }
+
     public function test_pay_status_reports_paid_after_webhook(): void
     {
         $seller = $this->seller();
