@@ -54,11 +54,14 @@
                 @if (Auth::user()->roles == 'admin')
                     <hr class="sidebar-divider">
                     <div class="sidebar-heading">Administração</div>
+                    <li class="nav-item {{ request()->routeIs('consultants', 'consultant') ? 'active' : '' }}">
+                        <a class="nav-link" href="{{ route('consultants') }}"> <i data-lucide="handshake"></i> <span>Consultores</span></a>
+                    </li>
                     <li class="nav-item {{ request()->routeIs('users', 'user') ? 'active' : '' }}">
                         <a class="nav-link" href="{{ route('users') }}"> <i data-lucide="user-cog"></i> <span>Pessoas</span></a>
                     </li>
                     <li class="nav-item {{ request()->routeIs('gateway') ? 'active' : '' }}">
-                        <a class="nav-link" href="{{ route('gateway') }}"> <i data-lucide="credit-card"></i> <span>Gateway</span></a>
+                        <a class="nav-link" href="{{ route('gateway') }}"> <i data-lucide="settings"></i> <span>Configurações</span></a>
                     </li>
                 @endif
 

@@ -13,9 +13,16 @@
             <div class="card shadow h-100 py-2">
                 <div class="card-body">
 
-                    <div class="btn-group mb-4">
-                        <button type="button" class="btn btn-outline-dark text-muted" data-toggle="modal" data-target="#filterModal" title="Filtrar"><i class="fas fa-filter fa-sm text-muted"></i></button>
-                        <button type="button" class="btn btn-outline-dark" title="Recarregar" onClick="location.reload()"><i class="fas fa-sync-alt fa-sm text-muted"></i></button>
+                    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-outline-dark text-muted" data-toggle="modal" data-target="#filterModal" title="Filtrar"><i class="fas fa-filter fa-sm text-muted"></i></button>
+                            <button type="button" class="btn btn-outline-dark" title="Recarregar" onClick="location.reload()"><i class="fas fa-sync-alt fa-sm text-muted"></i></button>
+                        </div>
+                        @if(Auth::user()->roles == 'admin')
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-toggle="modal" data-target="#destroyAllModal">
+                                <i class="fas fa-trash fa-sm"></i> Excluir tudo
+                            </button>
+                        @endif
                     </div>
 
                     <div class="table-responsive">
@@ -106,4 +113,27 @@
             </form>
         </div>
     </div>
+
+    @if(Auth::user()->roles == 'admin')
+        <div class="modal fade" id="destroyAllModal" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <form action="{{ route('deleted-sales-all') }}" method="POST" class="modal-content">
+                    @csrf
+                    <div class="modal-header">
+                        <h5 class="modal-title text-danger">Excluir todos os beneficiários</h5>
+                        <button class="close" type="button" data-dismiss="modal"><span>&times;</span></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-2">Isso cancela <strong>todas</strong> as vendas ativas/pendentes e desativa os titulares. Não dá para desfazer facilmente.</p>
+                        <p class="small text-muted">Digite <strong>EXCLUIR</strong> para confirmar:</p>
+                        <input type="text" name="confirm" class="form-control" placeholder="EXCLUIR" required autocomplete="off">
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-outline-secondary" type="button" data-dismiss="modal">Cancelar</button>
+                        <button class="btn btn-danger" type="submit">Confirmar exclusão</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    @endif
 @endsection

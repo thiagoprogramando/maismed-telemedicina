@@ -10,6 +10,7 @@ use App\Http\Controllers\Plan\PlanController;
 use App\Http\Controllers\Sale\SaleController;
 use App\Http\Controllers\Sale\SaleExternalController;
 use App\Http\Controllers\User\UserController;
+use App\Http\Controllers\User\ConsultantController;
 use App\Http\Controllers\Gateway\GatewayController;
 
 Route::get('/', [LoginController::class, 'index'])->name('login');
@@ -35,6 +36,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/sales', [SaleController::class, 'index'])->name('sales');
     Route::get('/sale/{uuid}', [SaleController::class, 'show'])->name('sale');
     Route::post('/deleted-sale/{uuid}', [SaleController::class, 'destroy'])->name('deleted-sale');
+    Route::post('/deleted-sales-all', [SaleController::class, 'destroyAll'])->name('deleted-sales-all');
+
+    Route::get('/consultants', [ConsultantController::class, 'index'])->name('consultants');
+    Route::get('/consultant/{uuid}', [ConsultantController::class, 'show'])->name('consultant');
+    Route::post('/transfer-sale', [ConsultantController::class, 'transfer'])->name('transfer-sale');
 
     Route::get('wallet/{uuid}', [WalletController::class, 'show'])->name('wallet');
 

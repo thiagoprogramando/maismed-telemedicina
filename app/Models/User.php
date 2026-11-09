@@ -55,6 +55,11 @@ class User extends Authenticatable {
         return $this->hasMany(Invoice::class);
     }
 
+    /** Vendas em que este usuário é o consultor (seller_id). */
+    public function salesAsSeller() {
+        return $this->hasMany(Sale::class, 'seller_id');
+    }
+
     public function maskName() {
         
         if (empty($this->name)) {

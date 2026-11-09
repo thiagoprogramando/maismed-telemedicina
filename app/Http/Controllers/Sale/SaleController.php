@@ -19,7 +19,7 @@ class SaleController extends Controller {
     public function index (Request $request) {
 
         $validated = $request->validate([
-            'parent_id'  => ['nullable', 'string'],
+            'seller_uuid'=> ['nullable', 'string'],
             'search'     => ['nullable', 'string', 'max:255'],
             'document'   => ['nullable', 'string', 'max:20'],
             'date_start' => ['nullable', 'date'],
@@ -30,11 +30,14 @@ class SaleController extends Controller {
         $query  = Sale::query();
     
         if ($user->roles === 'admin') {
-            if (!empty($validated['parent_id'])) {
-                $query->where('parent_id', $validated['parent_id']);
+            if (!empty($validated['seller_uuid'])) {
+                $sellerId = User::where('uuid', $validated['seller_uuid'])->value('id');
+                if ($sellerId) {
+                    $query->where('seller_id', $sellerId);
+                }
             }
         } else {
-            $query->where('parent_id', $user->uuid);
+            $query->where('seller_id', $user->id);
         }
     
         if (!empty($validated['search'])) {
@@ -138,6 +141,54 @@ class SaleController extends Controller {
         }
     
         return redirect()->back()->with('success', 'Venda/Beneficiário cancelada com sucesso, os dependentes vinculados foram desativados!');
+    }
+
+    public function destroyAll(Request $request)
+    {
+        if (Auth::user()->roles !== 'admin') {
+            return redirect()->back()->with('infor', 'Apenas o administrador pode excluir todos os beneficiários.');
+        }
+
+        $request->validate([
+            'confirm' => ['required', 'in:EXCLUIR'],
+        ], [
+            'confirm.required' => 'Digite EXCLUIR para confirmar.',
+            'confirm.in'       => 'Confirmação inválida. Digite EXCLUIR.',
+        ]);
+
+        $count = 0;
+
+        try {
+            DB::transaction(function () use (&$count) {
+                $sales = Sale::whereIn('status', ['pendent', 'active'])->get();
+                foreach ($sales as $sale) {
+                    Invoice::where('sale_id', $sale->id)
+                        ->whereIn('status', ['pendent', 'canceled'])
+                        ->update(['status' => 'canceled']);
+
+                    $sale->status = 'canceled';
+                    $sale->save();
+
+                    if ($sale->user_id) {
+                        User::where('parent_id', $sale->user_id)
+                            ->orWhere('id', $sale->user_id)
+                            ->update(['status' => 'inactive']);
+                    }
+
+                    $count++;
+                }
+            });
+        } catch (\Throwable $e) {
+            Log::error('Falha ao excluir todos os beneficiários', ['error' => $e->getMessage()]);
+            return redirect()->back()->with('error', 'Não foi possível concluir a exclusão em massa.');
+        }
+
+        Log::warning('Admin excluiu beneficiários em massa', [
+            'admin' => Auth::user()->uuid,
+            'count' => $count,
+        ]);
+
+        return redirect()->route('sales')->with('success', "{$count} venda(s)/beneficiário(s) cancelada(s).");
     }
 
     private function escapeLikeTerm(string $term): string {
