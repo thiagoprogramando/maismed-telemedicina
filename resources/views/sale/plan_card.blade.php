@@ -13,8 +13,10 @@
     $form       = $form ?? null;
     $parent     = $parent ?? null;
     $money      = fn ($value) => 'R$ ' . number_format($value, 2, ',', '.');
-    $features   = $plan->featuresList();
-    $phone      = $parent ? preg_replace('/\D/', '', (string) $parent->phone) : '';
+    $features     = $plan->featuresList();
+    $descBullets  = $plan->descriptionBullets();
+    $kinshipLike  = collect($features)->contains(fn ($f) => (bool) preg_match('/filho|neta?|sogro|genro|nora|esposa|esposo|irm[aã]o|m[aã]e|pai/iu', $f));
+    $phone        = $parent ? preg_replace('/\D/', '', (string) $parent->phone) : '';
 @endphp
 
 <div class="pc-card {{ $isBusiness ? 'pc-business' : 'pc-family' }}"
@@ -56,12 +58,21 @@
         @endif
     @endif
 
-    @if ($plan->description)
+    @if (count($descBullets))
+        <ul class="pc-features">
+            @foreach ($descBullets as $bullet)
+                <li><i data-lucide="check"></i> <span>{{ $bullet }}</span></li>
+            @endforeach
+        </ul>
+    @elseif ($plan->description)
         <p class="pc-description">{{ $plan->description }}</p>
     @endif
 
     @if (count($features))
-        <ul class="pc-features">
+        @if ($kinshipLike)
+            <p class="pc-features-label">Parentesco permitido</p>
+        @endif
+        <ul class="pc-features {{ $kinshipLike ? 'pc-features--kinship' : '' }}">
             @foreach ($features as $feature)
                 <li><i data-lucide="check"></i> <span>{{ $feature }}</span></li>
             @endforeach

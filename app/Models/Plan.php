@@ -82,8 +82,55 @@ class Plan extends Model {
         return '/mês';
     }
 
-    public function featuresList () {
-        return array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $this->features))));
+    /**
+     * Benefícios do plano para a vitrine.
+     * No admin são salvos como JSON (um por linha); legado pode ser texto puro.
+     */
+    public function featuresList(): array
+    {
+        $raw = trim((string) $this->features);
+        if ($raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        $items   = is_array($decoded)
+            ? $decoded
+            : preg_split('/\r\n|\r|\n/', $raw);
+
+        return array_values(array_filter(array_map(
+            fn ($item) => $this->formatFeatureLabel(trim((string) $item)),
+            $items
+        )));
+    }
+
+    /** Descrição com "|" vira lista de benefícios na vitrine. */
+    public function descriptionBullets(): array
+    {
+        $raw = trim((string) $this->description);
+        if ($raw === '' || !str_contains($raw, '|')) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('trim', explode('|', $raw))));
+    }
+
+    private function formatFeatureLabel(string $label): ?string
+    {
+        if ($label === '') {
+            return null;
+        }
+
+        // "Filho(a)" → "Filho / Filha"; "Neto(a)" → "Neto / Neta"; "Sogro(a)" → "Sogro / Sogra"
+        $map = [
+            'Filho(a)'  => 'Filho / Filha',
+            'Neto(a)'   => 'Neto / Neta',
+            'Sogro(a)'  => 'Sogro / Sogra',
+            'Irmão(ã)'  => 'Irmão / Irmã',
+            'Irmao(a)'  => 'Irmão / Irmã',
+        ];
+
+        return $map[$label] ?? $label;
     }
 
     public function isBusiness (): bool {

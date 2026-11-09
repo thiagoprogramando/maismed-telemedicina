@@ -88,6 +88,15 @@
     margin-top: 10px;
 }
 
+.pc-features-label {
+    margin: 14px 0 6px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #4b5563;
+}
+
 .pc-features {
     margin: 12px 0 0;
     padding: 0;
@@ -96,11 +105,22 @@
     color: #374151;
 }
 
+.pc-features--kinship {
+    margin-top: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 12px;
+}
+
 .pc-features li {
     display: flex;
     align-items: flex-start;
     gap: 8px;
     margin-bottom: 4px;
+}
+
+.pc-features--kinship li {
+    margin-bottom: 0;
 }
 
 .pc-features svg {
