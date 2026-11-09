@@ -8,6 +8,33 @@
         {{-- <a href="#" class="d-none d-sm-inline-block btn btn-sm btn-primary shadow-sm"><i class="fas fa-graduation-cap fa-sm text-white-50"></i> Aprender</a> --}}
     </div>
 
+    @if(session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+
+    @php
+        $payLink = session('pay_link') ?: (($sale->status === 'pendent') ? route('pay', $sale->uuid) : null);
+        $needsAccept = !empty(($sale->payment_features['needs_accept'] ?? false)) && empty($sale->payment_features['accepted_at'] ?? null);
+    @endphp
+
+    @if($payLink)
+        <div class="alert alert-primary d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+            <div>
+                <strong>Link para o cliente</strong>
+                @if($needsAccept)
+                    <span class="badge badge-warning ml-1">Aguardando aceite do contrato</span>
+                @endif
+                <div class="small text-break mt-1" id="sale-pay-link">{{ $payLink }}</div>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-light" onclick="navigator.clipboard.writeText(document.getElementById('sale-pay-link').innerText).then(() => alert('Link copiado!'))">
+                    Copiar link
+                </button>
+                <a href="{{ $payLink }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-light border">Abrir</a>
+            </div>
+        </div>
+    @endif
+
     <div class="row">
         <div class="col-12 col-sm-12 col-md-7 col-lg-7 mb-2">
             <div class="card shadow h-100">
@@ -84,6 +111,41 @@
         </div>
         
         <div class="col-12 col-sm-12 col-md-5 col-lg-5 mb-2">
+            @if(Auth::user()->roles === 'admin')
+                <div class="card shadow mb-2">
+                    <div class="card-body">
+                        <div class="text-xs font-weight-bold text-dark text-uppercase mb-2">Consultor responsável</div>
+                        <p class="mb-2">
+                            <strong>{{ $currentSeller->name ?? 'Sem consultor' }}</strong>
+                            @if(!empty($currentSeller?->email))
+                                <br><small class="text-muted">{{ $currentSeller->email }}</small>
+                            @endif
+                        </p>
+                        @if(($consultants ?? collect())->isNotEmpty())
+                            <form action="{{ route('transfer-sale') }}" method="POST" class="mt-2"
+                                onsubmit="return confirm('Transferir este beneficiário? Admin e consultores receberão e-mail.');">
+                                @csrf
+                                <input type="hidden" name="sale_uuid" value="{{ $sale->uuid }}">
+                                <label class="small text-muted d-block mb-1">Transferir para outro consultor</label>
+                                <div class="input-group">
+                                    <select name="to_consultant_uuid" class="form-control" required>
+                                        <option value="">Selecione o consultor…</option>
+                                        @foreach ($consultants as $consultant)
+                                            <option value="{{ $consultant->uuid }}">{{ $consultant->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="input-group-append">
+                                        <button type="submit" class="btn btn-warning">Transferir</button>
+                                    </div>
+                                </div>
+                            </form>
+                        @else
+                            <small class="text-muted">Cadastre outro consultor em Administração → Consultores para poder transferir.</small>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
             <div class="card shadow h-100">
                 <div class="card-body">
                     <div class="text-xs font-weight-bold text-dark text-uppercase mb-1">DEPENDENTES</div>

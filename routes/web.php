@@ -25,6 +25,7 @@ Route::get('/create-sale/{plan}/{parent?}', [SaleExternalController::class, 'ind
 Route::get('/thank-you', [SaleExternalController::class, 'thankYou'])->name('thank-you');
 Route::post('created-sale', [SaleExternalController::class, 'store'])->name('created-sale');
 Route::get('/pay/{uuid}', [SaleExternalController::class, 'payShow'])->name('pay');
+Route::post('/pay/{uuid}/accept', [SaleExternalController::class, 'acceptContract'])->name('pay-accept');
 Route::get('/pay/{uuid}/status', [SaleExternalController::class, 'payStatus'])->name('pay-status');
 Route::get('/pay/{uuid}/confirmed', [SaleExternalController::class, 'payConfirmed'])->name('pay-confirmed');
 Route::post('/pay/{uuid}/card', [SaleExternalController::class, 'payCard'])->name('pay-card');
@@ -34,6 +35,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/app', [AppController::class, 'index'])->name('app');
 
     Route::get('/sales', [SaleController::class, 'index'])->name('sales');
+    Route::get('/sales/create', [SaleController::class, 'create'])->name('sales-create');
+    Route::post('/sales/create', [SaleController::class, 'storeInvite'])->name('sales-store');
     Route::get('/sale/{uuid}', [SaleController::class, 'show'])->name('sale');
     Route::post('/deleted-sale/{uuid}', [SaleController::class, 'destroy'])->name('deleted-sale');
     Route::post('/deleted-sales-all', [SaleController::class, 'destroyAll'])->name('deleted-sales-all');

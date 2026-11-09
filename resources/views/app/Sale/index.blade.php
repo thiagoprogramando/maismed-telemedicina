@@ -17,6 +17,9 @@
                         <div class="btn-group">
                             <button type="button" class="btn btn-outline-dark text-muted" data-toggle="modal" data-target="#filterModal" title="Filtrar"><i class="fas fa-filter fa-sm text-muted"></i></button>
                             <button type="button" class="btn btn-outline-dark" title="Recarregar" onClick="location.reload()"><i class="fas fa-sync-alt fa-sm text-muted"></i></button>
+                            <a href="{{ route('sales-create') }}" class="btn btn-primary btn-sm" title="Incluir beneficiário">
+                                <i class="fas fa-user-plus fa-sm"></i> Incluir beneficiário
+                            </a>
                         </div>
                         @if(Auth::user()->roles == 'admin')
                             <button type="button" class="btn btn-outline-danger btn-sm" data-toggle="modal" data-target="#destroyAllModal">

@@ -19,17 +19,48 @@
                     <img src="{{ asset('Assets/img/logo.png') }}" class="img-fluid" alt="Logo Mais Med">
                 </div>
 
+                @php $needsAccept = $needsAccept ?? false; @endphp
+
                 <ol class="ck-steps" aria-label="Etapas da adesão">
                     <li class="ck-step is-done"><span class="ck-step-num">1</span> Dados</li>
                     @if ($plan->hasSimulator())
                         <li class="ck-step is-done"><span class="ck-step-num">2</span> Dependentes</li>
                     @endif
-                    <li class="ck-step is-done"><span class="ck-step-num">{{ $plan->hasSimulator() ? 3 : 2 }}</span> Contrato</li>
-                    <li class="ck-step is-active"><i data-lucide="wallet"></i> Pagamento</li>
+                    <li class="ck-step {{ $needsAccept ? 'is-active' : 'is-done' }}"><span class="ck-step-num">{{ $plan->hasSimulator() ? 3 : 2 }}</span> Contrato</li>
+                    <li class="ck-step {{ $needsAccept ? '' : 'is-active' }}"><i data-lucide="wallet"></i> Pagamento</li>
                 </ol>
 
                 <div class="card ck-card">
                     <div class="card-body p-4 p-md-5">
+                        @if ($needsAccept)
+                            <div class="text-center mb-4">
+                                <h1 class="h4 ck-title mb-1">Aceite do contrato</h1>
+                                <p class="mb-0 text-muted">
+                                    Plano <strong>{{ $plan->name }}</strong>
+                                    — R$ {{ number_format((float) $sale->price, 2, ',', '.') }}/mês
+                                </p>
+                            </div>
+
+                            <div class="contract-wrap mb-3 border rounded p-3" style="max-height: 320px; overflow-y: auto;">
+                                <div class="contract-preview">
+                                    {!! $plan->terms ?: '<p class="text-muted mb-0">Contrato de adesão ao plano <strong>' . e($plan->name) . '</strong>.</p>' !!}
+                                </div>
+                            </div>
+
+                            <form action="{{ route('pay-accept', $sale->uuid) }}" method="POST">
+                                @csrf
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input @error('accept_terms') is-invalid @enderror" type="checkbox" name="accept_terms" id="accept_terms" value="1" required>
+                                    <label class="form-check-label" for="accept_terms">
+                                        Li e aceito o contrato de adesão e os termos do plano.
+                                    </label>
+                                    @error('accept_terms')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-user btn-block w-100 ck-btn-primary">
+                                    Aceitar e ir para o pagamento
+                                </button>
+                            </form>
+                        @else
                         <div class="text-center mb-4">
                             <h1 class="h4 ck-title mb-1">Finalize o pagamento</h1>
                             <p class="mb-0 text-muted">
@@ -137,6 +168,7 @@
                                     <p class="text-muted mb-0">Aguarde enquanto preparamos sua fatura.</p>
                                 @endif
                             </div>
+                        @endif
                         @endif
                     </div>
                 </div>

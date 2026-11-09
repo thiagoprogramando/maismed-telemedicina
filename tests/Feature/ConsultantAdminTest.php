@@ -169,4 +169,42 @@ class ConsultantAdminTest extends TestCase
             ->assertSee('Usuários ativos', false)
             ->assertSee('Não pagaram', false);
     }
+
+    public function test_sale_show_has_transfer_form_for_admin(): void
+    {
+        $admin = $this->admin();
+        $collab = $this->collaborator();
+        $plan   = Plan::create(['name' => 'Individual', 'price' => 49.90, 'status' => 'active']);
+
+        $buyer             = new User();
+        $buyer->uuid       = (string) Str::uuid();
+        $buyer->name       = 'Cliente Show';
+        $buyer->email      = 'show@example.com';
+        $buyer->document   = '39053344705';
+        $buyer->phone      = '11988887777';
+        $buyer->password   = bcrypt('secret');
+        $buyer->birth_date = '1990-01-01';
+        $buyer->roles      = 'user';
+        $buyer->status     = 'active';
+        $buyer->save();
+
+        $sale                 = new Sale();
+        $sale->uuid           = (string) Str::uuid();
+        $sale->user_id        = $buyer->id;
+        $sale->seller_id      = $admin->id;
+        $sale->plan_id        = $plan->id;
+        $sale->name           = $plan->name;
+        $sale->description    = $plan->name;
+        $sale->price          = 49.90;
+        $sale->commission     = 0;
+        $sale->status         = 'active';
+        $sale->save();
+
+        $this->actingAs($admin)
+            ->get(route('sale', $sale->uuid))
+            ->assertOk()
+            ->assertSee('Transferir para outro consultor', false)
+            ->assertSee($collab->name, false)
+            ->assertSee(route('transfer-sale'), false);
+    }
 }

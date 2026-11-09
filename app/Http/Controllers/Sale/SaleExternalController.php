@@ -269,6 +269,21 @@ class SaleExternalController extends Controller {
             return redirect()->route('showcase')->with('error', 'Pagamentos indisponíveis no momento. Tente novamente em breve!');
         }
 
+        $features = is_array($sale->payment_features) ? $sale->payment_features : [];
+        $needsAccept = !empty($features['needs_accept']) && empty($features['accepted_at']);
+
+        if ($needsAccept) {
+            return view('sale.pay', [
+                'sale'         => $sale,
+                'plan'         => $sale->plan,
+                'method'       => $sale->payment_method ?: 'PIX',
+                'pix'          => null,
+                'invoiceUrl'   => null,
+                'error'        => null,
+                'needsAccept'  => true,
+            ]);
+        }
+
         $method = $sale->payment_method ?: 'PIX';
         $pix = null;
         $invoiceUrl = null;
@@ -303,7 +318,31 @@ class SaleExternalController extends Controller {
             'pix'         => $pix,
             'invoiceUrl'  => $invoiceUrl,
             'error'       => $error,
+            'needsAccept' => false,
         ]);
+    }
+
+    public function acceptContract(Request $request, string $uuid)
+    {
+        $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
+        if (!$sale || !$sale->user || !$sale->plan || $sale->status !== 'pendent') {
+            return redirect()->route('showcase')->with('info', 'Contrato indisponível. Verifique o link ou fale com seu consultor.');
+        }
+
+        $request->validate([
+            'accept_terms' => ['accepted'],
+        ], [
+            'accept_terms.accepted' => 'É necessário aceitar o contrato para continuar.',
+        ]);
+
+        $features = is_array($sale->payment_features) ? $sale->payment_features : [];
+        $features['needs_accept'] = true;
+        $features['accepted_at']  = now()->toIso8601String();
+        $features['accepted_ip']  = $request->ip();
+        $sale->payment_features   = $features;
+        $sale->save();
+
+        return redirect()->route('pay', $sale->uuid)->with('success', 'Contrato aceito. Prossiga com o pagamento da 1ª parcela.');
     }
 
     public function payStatus(string $uuid)
@@ -350,6 +389,11 @@ class SaleExternalController extends Controller {
         $sale = Sale::with(['user', 'plan'])->where('uuid', $uuid)->first();
         if (!$sale || $sale->status !== 'pendent' || !$sale->user || !$sale->plan) {
             return redirect()->route('showcase')->with('info', 'Pagamento indisponível. Verifique o link ou fale com seu consultor.');
+        }
+
+        $features = is_array($sale->payment_features) ? $sale->payment_features : [];
+        if (!empty($features['needs_accept']) && empty($features['accepted_at'])) {
+            return redirect()->route('pay', $sale->uuid)->with('error', 'Aceite o contrato antes de pagar.');
         }
 
         if ($sale->payment_method !== 'CREDIT_CARD') {

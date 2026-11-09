@@ -461,4 +461,98 @@ class SalePaymentTest extends TestCase
         $this->assertSame('active', $sale->status);
         $this->assertSame('active', $sale->user->status);
     }
+
+    public function test_staff_can_invite_beneficiary_and_generate_pay_link(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create([
+            'name'   => 'Familiar',
+            'price'  => 79.90,
+            'status' => 'active',
+            'terms'  => '<p>Contrato de adesão familiar.</p>',
+        ]);
+
+        $response = $this->actingAs($seller)->post(route('sales-store'), [
+            'plan_id'        => $plan->uuid,
+            'name'           => 'Maria Convidada',
+            'document'       => '529.982.247-25',
+            'birth_date'     => '1988-05-10',
+            'phone'          => '(11) 98888-7777',
+            'email'          => 'maria.convite@example.com',
+            'payment_method' => 'PIX',
+            'due_date'       => 10,
+        ]);
+
+        $sale = Sale::first();
+        $this->assertNotNull($sale);
+        $response->assertRedirect(route('sale', $sale->uuid));
+        $response->assertSessionHas('pay_link', route('pay', $sale->uuid));
+        $this->assertSame('pendent', $sale->status);
+        $this->assertTrue((bool) ($sale->payment_features['needs_accept'] ?? false));
+        $this->assertSame($seller->id, $sale->seller_id);
+        $this->assertCount(0, $this->asaas->charges);
+    }
+
+    public function test_invited_pay_requires_contract_accept_before_charge(): void
+    {
+        $seller = $this->seller();
+        $plan   = Plan::create([
+            'name'   => 'Individual',
+            'price'  => 49.90,
+            'status' => 'active',
+            'terms'  => '<p>Contrato individual.</p>',
+        ]);
+
+        $this->actingAs($seller)->post(route('sales-store'), [
+            'plan_id'        => $plan->uuid,
+            'name'           => 'João Convidado',
+            'document'       => '390.533.447-05',
+            'birth_date'     => '1992-03-15',
+            'phone'          => '(21) 97777-6666',
+            'email'          => 'joao.convite@example.com',
+            'payment_method' => 'PIX',
+            'due_date'       => 15,
+        ])->assertRedirect();
+
+        $sale = Sale::first();
+
+        $this->get(route('pay', $sale->uuid))
+            ->assertOk()
+            ->assertSee('Aceite do contrato', false)
+            ->assertSee('Contrato individual.', false)
+            ->assertDontSee('Pague com PIX', false);
+
+        $this->assertCount(0, $this->asaas->charges);
+
+        $this->post(route('pay-accept', $sale->uuid), [])
+            ->assertSessionHasErrors('accept_terms');
+
+        $this->post(route('pay-accept', $sale->uuid), ['accept_terms' => '1'])
+            ->assertRedirect(route('pay', $sale->uuid));
+
+        $sale->refresh();
+        $this->assertNotEmpty($sale->payment_features['accepted_at'] ?? null);
+
+        $this->get(route('pay', $sale->uuid))
+            ->assertOk()
+            ->assertSee('Pague com PIX', false);
+
+        $this->assertCount(1, $this->asaas->charges);
+        $this->assertSame(1, Invoice::count());
+    }
+
+    public function test_sales_create_form_is_available_to_staff(): void
+    {
+        $seller = $this->seller();
+
+        $this->actingAs($seller)
+            ->get(route('sales-create'))
+            ->assertOk()
+            ->assertSee('Incluir beneficiário', false);
+
+        $this->actingAs($seller)
+            ->get(route('sales'))
+            ->assertOk()
+            ->assertSee(route('sales-create'), false);
+    }
 }
